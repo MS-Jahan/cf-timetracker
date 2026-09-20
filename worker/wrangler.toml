@@ -1,0 +1,17 @@
+name = "cf-timetracker"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "cf-timetracker"
+database_id = "placeholder-dev-local"
+
+[vars]
+# Dev only. In prod set ALLOWED_ORIGINS to the Pages origin(s), comma-separated.
+ALLOWED_ORIGINS = "*"
+# GAS_SECRET comes via `wrangler secret put GAS_SECRET` (or .dev.vars locally).
+# Voice capture uses the secret `GEMINI_API_KEY`; optionally set GEMINI_MODEL here.
+# GEMINI_MODEL = "gemini-2.5-flash"
+# Set DEMO_MODE = "true" to enable the demo deployment experience.
+DEMO_MODE = "false"
