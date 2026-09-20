@@ -921,20 +921,29 @@ export async function resetDemoData(env) {
     { id: "e5555555-5555-4555-8555-555555555555", customer_id: "c2222222-2222-4222-8222-222222222222", project_id: "p3333333-3333-4333-8333-333333333333", activity_id: "a4444444-4444-4444-8444-444444444444", description: "Regression pass", tags: "qa", start_time: 1755490800000, end_time: 1755494400000, duration_seconds: 3600, rate_applied: 95.0, cost: 95.0 },
   ];
 
-  // Ensure customers, projects, activities exist (upsert-style: ignore on conflict)
+  // Ensure customers, projects, activities exist (upsert-style: ignore on conflict),
+  // then resolve the ids actually stored — a name may already exist under a different
+  // id (activities.name is UNIQUE; default "General"/"Meeting" rows pre-date the demo
+  // seed), so entries must reference the resolved ids, not the literal demo ones.
+  const cid = {};
   for (const c of customers) {
     await env.DB.prepare("INSERT OR IGNORE INTO customers (id, name, currency, hourly_rate) VALUES (?, ?, ?, ?)").bind(c.id, c.name, c.currency, c.hourly_rate).run();
+    cid[c.id] = (await env.DB.prepare("SELECT id FROM customers WHERE id = ? OR name = ?").bind(c.id, c.name).first()).id;
   }
+  const pid = {};
   for (const p of projects) {
-    await env.DB.prepare("INSERT OR IGNORE INTO projects (id, customer_id, name, budget_type, rate) VALUES (?, ?, ?, ?, ?)").bind(p.id, p.customer_id, p.name, p.budget_type, p.rate).run();
+    await env.DB.prepare("INSERT OR IGNORE INTO projects (id, customer_id, name, budget_type, rate) VALUES (?, ?, ?, ?, ?)").bind(p.id, cid[p.customer_id], p.name, p.budget_type, p.rate).run();
+    pid[p.id] = (await env.DB.prepare("SELECT id FROM projects WHERE id = ? OR (customer_id = ? AND name = ?)").bind(p.id, cid[p.customer_id], p.name).first()).id;
   }
+  const aid = {};
   for (const a of activities) {
     await env.DB.prepare("INSERT OR IGNORE INTO activities (id, name) VALUES (?, ?)").bind(a.id, a.name).run();
+    aid[a.id] = (await env.DB.prepare("SELECT id FROM activities WHERE id = ? OR lower(name) = lower(?)").bind(a.id, a.name).first()).id;
   }
   for (const e of entries) {
     await env.DB.prepare(
       "INSERT INTO time_entries (id, customer_id, project_id, activity_id, description, tags, start_time, end_time, duration_seconds, rate_applied, cost, is_running) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)"
-    ).bind(e.id, e.customer_id, e.project_id, e.activity_id, e.description, e.tags, e.start_time, e.end_time, e.duration_seconds, e.rate_applied, e.cost).run();
+    ).bind(e.id, cid[e.customer_id], pid[e.project_id], aid[e.activity_id], e.description, e.tags, e.start_time, e.end_time, e.duration_seconds, e.rate_applied, e.cost).run();
   }
   return { status: "ok" };
 }
