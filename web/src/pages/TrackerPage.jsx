@@ -1,11 +1,16 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import EntryEditor from "../components/EntryEditor.jsx";
 import EntryForm from "../components/EntryForm.jsx";
 import Ledger from "../components/Ledger.jsx";
-import { API_BASE, startTimer, stopTimer, updateTimeEntry } from "../lib/api.js";
+import { API_BASE, fetchAllEntries, startTimer, stopTimer, updateTimeEntry } from "../lib/api.js";
 import { buildCsv, downloadCsv, utcMonth } from "../lib/format.js";
 import { Link } from "../lib/router.jsx";
 import Icon from "../components/Icon.jsx";
+
+const PERIOD_KEY = "cf-tt-ledger-period";
+const readPeriod = () => {
+  try { return localStorage.getItem(PERIOD_KEY) || "all"; } catch { return "all"; }
+};
 
 export default function TrackerPage({ tracker }) {
   const {
@@ -25,10 +30,26 @@ export default function TrackerPage({ tracker }) {
     projectTasks,
     activeTimer,
   } = tracker;
-  const [period, setPeriod] = useState("all");
+  const [period, setPeriod] = useState(readPeriod);
   const [clientFilter, setClientFilter] = useState("all");
   const [projectFilter, setProjectFilter] = useState("all");
   const [editingEntry, setEditingEntry] = useState(null);
+  // Bootstrap only carries the last 50 entries, so the ledger fetches the full
+  // history itself; `entries` is the instant first paint, `history` the truth.
+  const [history, setHistory] = useState(null);
+  const [historyError, setHistoryError] = useState("");
+  const reloadHistory = useCallback(() => {
+    fetchAllEntries().then((rows) => {
+      setHistory(rows);
+      setHistoryError("");
+    }).catch((err) => setHistoryError(err.message));
+  }, []);
+  useEffect(() => { reloadHistory(); }, [reloadHistory, tracker.entries]);
+
+  const selectPeriod = (value) => {
+    setPeriod(value);
+    try { localStorage.setItem(PERIOD_KEY, value); } catch {}
+  };
 
   /**
    * Losing the single-timer race (another tab started first) isn't a failure: reload so
@@ -44,17 +65,18 @@ export default function TrackerPage({ tracker }) {
     }
   };
 
-  const periods = useMemo(() => [...new Set(entries.map((e) => utcMonth(e.start_time)))].sort().reverse(), [entries]);
+  const ledgerEntries = history ?? entries;
+  const periods = useMemo(() => [...new Set(ledgerEntries.map((e) => utcMonth(e.start_time)))].sort().reverse(), [ledgerEntries]);
 
   const filtered = useMemo(
     () =>
-      entries.filter((e) => {
+      ledgerEntries.filter((e) => {
         if (period !== "all" && utcMonth(e.start_time) !== period) return false;
         if (clientFilter !== "all" && e.customer_id !== clientFilter) return false;
         if (projectFilter !== "all" && e.project_id !== projectFilter) return false;
         return true;
       }),
-    [entries, period, clientFilter, projectFilter]
+    [ledgerEntries, period, clientFilter, projectFilter]
   );
 
   if (status === "loading") {
@@ -84,9 +106,9 @@ export default function TrackerPage({ tracker }) {
   const filterProjects = clientFilter === "all" ? projects : projects.filter((p) => p.customer_id === clientFilter);
 
   const hasFilters = period !== "all" || clientFilter !== "all" || projectFilter !== "all";
-  const ledgerSummary = filtered.length === entries.length && !hasFilters
-    ? `All ${entries.length} entries in the last 50 recorded.`
-    : `${filtered.length} of the last ${entries.length} entries match the filters.`;
+  const ledgerSummary = filtered.length === ledgerEntries.length && !hasFilters
+    ? `All ${ledgerEntries.length} entries.`
+    : `${filtered.length} of ${ledgerEntries.length} entries match the filters.`;
 
   const clearFilters = () => {
     setPeriod("all");
@@ -108,6 +130,12 @@ export default function TrackerPage({ tracker }) {
           </p>
         ) : null}
         {notice ? <p className="band band-notice" role="status">{notice}</p> : null}
+        {historyError ? (
+          <p className="band band-error" role="alert">
+            <strong>Could not load the full history.</strong> Showing the most recent entries only.{" "}
+            <button type="button" className="link" onClick={reloadHistory}>Retry</button>
+          </p>
+        ) : null}
       </div>
 
       {customers.length === 0 || projects.length === 0 || activities.length === 0 ? (
@@ -153,7 +181,7 @@ export default function TrackerPage({ tracker }) {
                 id="f-period"
                 className="select select-sm"
                 value={period}
-                onChange={(e) => setPeriod(e.target.value)}
+                onChange={(e) => selectPeriod(e.target.value)}
               >
                 <option value="all">All months</option>
                 {periods.map((m) => (

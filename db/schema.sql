@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS projects (
     name TEXT NOT NULL,
     budget_type TEXT CHECK(budget_type IN ('hourly', 'fixed')) DEFAULT 'hourly',
     rate REAL DEFAULT 0.0,
+    currency TEXT,               -- NULL inherits the client's currency
     image_url TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     archived_at DATETIME,

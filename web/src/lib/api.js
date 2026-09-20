@@ -114,6 +114,18 @@ export const listEntries = ({ fromMs, toMs, limit = 50, offset = 0 } = {}) => {
   return request(`/api/entries?${params.toString()}`);
 };
 
+/** The complete history, following pagination to the end (ledger + month filters). */
+export const fetchAllEntries = async ({ limit = 200 } = {}) => {
+  const out = [];
+  let offset = 0;
+  for (;;) {
+    const page = await listEntries({ limit, offset });
+    out.push(...page.entries);
+    if (page.entries.length < limit) return out;
+    offset += page.entries.length;
+  }
+};
+
 /** The task list of one project (linked shared activities with default flags). */
 export const getProjectTasks = (projectId) =>
   request(`/api/projects/${encodeURIComponent(projectId)}/tasks`);

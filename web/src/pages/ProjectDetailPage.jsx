@@ -41,12 +41,12 @@ export default function ProjectDetailPage() {
   }
 
   const project = data?.project;
-  const currency = project?.customer_currency || "USD";
+  const currency = project?.currency || project?.customer_currency || "USD";
   const rateLine =
     project?.rate > 0
       ? `${formatMoney(project.rate, currency)}/h`
       : project
-        ? `bills ${formatMoney(project.customer_rate || 0, currency)}/h from ${project.customer_name || "the client"}`
+        ? `No project rate set, so every entry inherits the client rate: ${formatMoney(project.customer_rate || 0, currency)}/h (${project.customer_name || "client"}).`
         : "—";
 
   return (

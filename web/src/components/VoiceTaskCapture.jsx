@@ -92,21 +92,28 @@ export default function VoiceTaskCapture({ disabled = false, onDraft }) {
   const isSuccess = state === "success";
 
   return (
-    <div className="mt-4 flex flex-wrap items-center gap-3" aria-live="polite">
+    <div className="group/voice mt-4 flex flex-wrap items-center gap-3" aria-live="polite">
       {isRecording ? (
         <button type="button" className="btn btn-accent btn-sm" onClick={stop} aria-label="Stop voice recording">
-          <Icon name="stop" size={16} />
+          <Icon name="microphone" size={16} />
           Stop recording
         </button>
       ) : (
-        <button type="button" className="btn btn-ghost btn-sm ring-1 ring-inset ring-base-300" disabled={disabled || isProcessing} onClick={start}>
+        <button type="button" className="btn btn-ghost btn-sm ring-1 ring-inset ring-base-300" disabled={disabled || isProcessing} onClick={start} title="Optional: creates a draft only — you review it before starting.">
           <Icon name="microphone" size={16} />
           {isProcessing ? "Understanding…" : "Describe by voice"}
         </button>
       )}
-      <span className="text-sm ink-muted">
-        {isRecording ? "Speak naturally: client, project, activity, and what you did." : isProcessing ? "Turning your note into timer fields…" : "Optional: creates a draft only — you review it before starting."}
-      </span>
+      {isRecording || isProcessing ? (
+        <span className="text-sm ink-muted">
+          {isRecording ? "Speak naturally: client, project, activity, and what you did." : "Turning your note into timer fields…"}
+        </span>
+      ) : (
+        // Idle hint stays out of the way: revealed on hover/focus, title covers touch.
+        <span className="text-sm ink-muted opacity-0 transition-opacity group-hover/voice:opacity-100 focus-within:opacity-100" title="Optional: creates a draft only — you review it before starting.">
+          Optional: creates a draft only — you review it before starting.
+        </span>
+      )}
       {isSuccess ? <span className="text-sm text-success" role="status">{success}</span> : null}
       {error ? <span className="text-sm text-accent" role="alert">{error}</span> : null}
     </div>

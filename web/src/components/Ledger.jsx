@@ -226,7 +226,7 @@ export default function Ledger({ entries, scopeLabel, onEdit, emptyMessage }) {
       </div>
 
       {/* Print-only footer */}
-      <div className="print-footer no-print-hidden">
+      <div className="print-footer">
         CS Time Tracker — Timesheet printed on {generatedDate} — {closed.length} entries, {toHours(totalSeconds)} hours
       </div>
     </section>

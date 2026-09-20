@@ -77,12 +77,16 @@ function DailyChart({ rows }) {
           const x = index * slot + (slot - barWidth) / 2;
           const y = chartHeight - barHeight;
           const label = row.day.slice(5);
+          // Dates belong under the bars, not behind a hover: label every bar
+          // while the slot is wide enough, then thin out instead of overlapping.
+          const every = points.length <= 16 ? 1 : Math.ceil(points.length / 12);
+          const showLabel = index % every === 0 || index === points.length - 1;
           return (
             <g key={row.day}>
               <title>{`${row.day}: ${formatDuration(row.total_seconds)}, ${formatMoney(row.total_cost)}`}</title>
               <rect x={x} y={y} width={barWidth} height={Math.max(2, barHeight)} fill="currentColor" opacity=".78" />
-              {(index === 0 || index === points.length - 1 || index % Math.ceil(points.length / 6) === 0) ? (
-                <text x={x + barWidth / 2} y={height - 8} textAnchor="middle" fontSize="11" fill="currentColor" opacity=".68">{label}</text>
+              {showLabel ? (
+                <text x={x + barWidth / 2} y={height - 8} textAnchor="middle" fontSize="10" fill="currentColor" opacity=".72">{label}</text>
               ) : null}
             </g>
           );
@@ -105,8 +109,13 @@ function DashboardSection({ title, note, children, className = "" }) {
   );
 }
 
+const PERIOD_KEY = "cf-tt-dashboard-period";
+const readPeriod = () => {
+  try { return localStorage.getItem(PERIOD_KEY) || "all"; } catch { return "all"; }
+};
+
 export default function DashboardPage() {
-  const [period, setPeriod] = useState("all");
+  const [period, setPeriod] = useState(readPeriod);
   const [layout, setLayout] = useState(readLayout);
   const [customizing, setCustomizing] = useState(false);
   const [data, setData] = useState(null);
@@ -131,6 +140,11 @@ export default function DashboardPage() {
 
   const totals = data?.totals;
   const dashboardCurrency = data?.currency || "USD";
+
+  const selectPeriod = (value) => {
+    setPeriod(value);
+    try { localStorage.setItem(PERIOD_KEY, value); } catch {}
+  };
 
   const toggle = (key) => setLayout((current) => {
     const next = { ...current, [key]: !current[key] };
@@ -159,7 +173,7 @@ export default function DashboardPage() {
         <div className="no-print flex flex-wrap items-end gap-3">
           <div>
             <label className="field-label" htmlFor="dashboard-period">Period</label>
-            <select id="dashboard-period" className="select select-sm" value={period} onChange={(event) => setPeriod(event.target.value)}>
+            <select id="dashboard-period" className="select select-sm" value={period} onChange={(event) => selectPeriod(event.target.value)}>
               <option value="all">All time</option>
               <option value="month">This month</option>
               <option value="30d">Last 30 days</option>

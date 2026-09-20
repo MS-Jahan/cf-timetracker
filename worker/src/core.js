@@ -402,7 +402,7 @@ export async function updateCustomer(env, id, patch = {}) {
 /** projects: customer_id FK, name, budget_type (hourly|fixed), rate — overrides the customer rate.
  *  `defaultTasks` names are linked per project (created globally on demand); the
  *  default when omitted is ["General", "Meeting"], and `[]` opts out entirely. */
-export async function createProject(env, { customerId, name, budgetType, rate, imageUrl, defaultTasks } = {}) {
+export async function createProject(env, { customerId, name, budgetType, rate, currency, imageUrl, defaultTasks } = {}) {
   if (isBlank(customerId)) return { status: "invalid", error: "customerId is required" };
   if (isBlank(name)) return { status: "invalid", error: "name is required" };
   const budget = isBlank(budgetType) ? "hourly" : String(budgetType).trim();
@@ -410,6 +410,12 @@ export async function createProject(env, { customerId, name, budgetType, rate, i
   const value = asRate(rate);
   const rateError = badRate(value);
   if (rateError) return { status: "invalid", error: rateError };
+  // Optional project currency; blank/absent inherits the client's.
+  let projectCurrency = null;
+  if (!isBlank(currency)) {
+    projectCurrency = String(currency).trim().toUpperCase();
+    if (!/^[A-Z]{3}$/.test(projectCurrency)) return { status: "invalid", error: "currency must be a 3-letter code, e.g. USD" };
+  }
   const image = optionalImageDataUrl(imageUrl);
   if (image.error) return { status: "invalid", error: image.error };
 
@@ -434,9 +440,9 @@ export async function createProject(env, { customerId, name, budgetType, rate, i
 
   const id = crypto.randomUUID();
   await env.DB.prepare(
-    "INSERT INTO projects (id, customer_id, name, budget_type, rate, image_url) VALUES (?, ?, ?, ?, ?, ?)"
+    "INSERT INTO projects (id, customer_id, name, budget_type, rate, currency, image_url) VALUES (?, ?, ?, ?, ?, ?, ?)"
   )
-    .bind(id, customerId, String(name).trim(), budget, value, image.value ?? null)
+    .bind(id, customerId, String(name).trim(), budget, value, projectCurrency, image.value ?? null)
     .run();
 
   const tasks = [];
@@ -476,6 +482,17 @@ export async function updateProject(env, id, patch = {}) {
     if (rateError) return { status: "invalid", error: rateError };
     sets.push("rate = ?");
     bind.push(value);
+  }
+  if (patch.currency !== undefined) {
+    // Blank clears the override (inherit the client's currency).
+    if (isBlank(patch.currency)) {
+      sets.push("currency = NULL");
+    } else {
+      const code = String(patch.currency).trim().toUpperCase();
+      if (!/^[A-Z]{3}$/.test(code)) return { status: "invalid", error: "currency must be a 3-letter code, e.g. USD" };
+      sets.push("currency = ?");
+      bind.push(code);
+    }
   }
   if (patch.customerId !== undefined) {
     const customer = await env.DB.prepare("SELECT id FROM customers WHERE id = ? AND archived_at IS NULL").bind(patch.customerId).first();
@@ -621,7 +638,8 @@ export async function getProjectDetail(env, id, { limit = 50, offset = 0 } = {})
   const safeOffset = Math.max(Number(offset) || 0, 0);
 
   const project = await env.DB.prepare(`
-    SELECT p.*, c.name AS customer_name, c.currency AS customer_currency, c.hourly_rate AS customer_rate
+    SELECT p.*, c.name AS customer_name, c.currency AS customer_currency, c.hourly_rate AS customer_rate,
+           COALESCE(p.currency, c.currency) AS currency
     FROM projects p
     LEFT JOIN customers c ON c.id = p.customer_id
     WHERE p.id = ?
@@ -630,7 +648,7 @@ export async function getProjectDetail(env, id, { limit = 50, offset = 0 } = {})
 
   const [entries, totals, byActivity, tasks] = await Promise.all([
     env.DB.prepare(`
-      SELECT te.*, c.name AS customer_name, a.name AS activity_name
+      SELECT te.*, c.name AS customer_name, c.currency AS currency, a.name AS activity_name
       FROM time_entries te
       LEFT JOIN customers c ON te.customer_id = c.id
       LEFT JOIN activities a ON te.activity_id = a.id
@@ -688,7 +706,7 @@ export async function getActivityDetail(env, id, { limit = 50, offset = 0 } = {}
 
   const [entries, totals, byClient] = await Promise.all([
     env.DB.prepare(`
-      SELECT te.*, c.name AS customer_name, p.name AS project_name
+      SELECT te.*, c.name AS customer_name, c.currency AS currency, p.name AS project_name
       FROM time_entries te
       LEFT JOIN customers c ON te.customer_id = c.id
       LEFT JOIN projects p ON te.project_id = p.id

@@ -11,6 +11,11 @@
   display: none;
 }
 
+/* Screen: the print footer lives in the DOM but never on screen. */
+.print-footer {
+  display: none;
+}
+
 /* Mobile print: ensure no overflow */
 @media print and (max-width: 600px) {
   @page {
@@ -216,10 +221,6 @@
     font-size: 8pt;
     color: #666;
     text-align: center;
-  }
-
-  .no-print-hidden {
-    display: none !important;
   }
 
   /* Page break helpers */

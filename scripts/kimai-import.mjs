@@ -35,7 +35,9 @@ if (!csvPath || !env.TRACKER_URL) {
 }
 const dry = env.DRY_RUN === "1";
 const chunkSize = Math.min(Math.max(Number(env.CHUNK) || 200, 1), 1000);
-const tz = env.KIMAI_TZ || "Asia/Dhaka";
+// Kimai exports naive wall-clock times in the exporting machine's zone. Default
+// to this machine's zone (usually the same); override with KIMAI_TZ.
+const tz = env.KIMAI_TZ || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 const base = env.TRACKER_URL.replace(/\/$/, "");
 const headers = env.TRACKER_TOKEN ? { "X-App-Token": env.TRACKER_TOKEN, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
 

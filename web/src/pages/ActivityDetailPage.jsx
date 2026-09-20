@@ -18,8 +18,9 @@ const PAGE = 50;
 function dominantCurrency(rows) {
   const totals = {};
   for (const row of rows) totals[row.currency || "?"] = (totals[row.currency || "?"] || 0) + Number(row.total_cost || 0);
-  const best = Object.entries(totals).sort((a, b) => b[1] - a[1])[0]?.[0];
-  return best && best !== "?" ? best : "USD";
+  const ranked = Object.entries(totals).sort((a, b) => b[1] - a[1]);
+  const best = ranked[0]?.[0];
+  return best && best !== "?" ? best : rows[0]?.currency || null;
 }
 
 export default function ActivityDetailPage() {
@@ -49,7 +50,8 @@ export default function ActivityDetailPage() {
   }
 
   const activity = data?.activity;
-  const currency = data ? dominantCurrency(data.by_client) : "USD";
+  const currency = data ? dominantCurrency(data.by_client) : null;
+  const mixedCurrency = data ? new Set(data.by_client.map((row) => row.currency).filter(Boolean)).size > 1 : false;
 
   return (
     <div>
@@ -65,7 +67,7 @@ export default function ActivityDetailPage() {
           <div>
             <h1 className="text-2xl font-semibold">{activity ? activity.name : "Activity"}</h1>
           <p className="ink-muted mt-1 text-sm">
-            {activity ? "Shared across clients; amounts in the dominant currency." : "Loading…"}
+            {activity ? (mixedCurrency ? "Shared across clients; each client shows their own currency below." : "Shared across clients; amounts in the billing currency.") : "Loading…"}
             {activity?.archived_at ? <span className="ml-2 badge badge-ghost badge-sm">Archived</span> : null}
           </p>
           </div>
@@ -80,9 +82,9 @@ export default function ActivityDetailPage() {
             <dd className="figure text-xl font-medium leading-none">{activity ? formatDuration(data.totals.total_seconds) : "—"}</dd>
           </div>
           <div>
-            <dt className="field-label">Billed</dt>
+            <dt className="field-label">Billed{mixedCurrency ? <span className="ml-1 text-xs ink-muted font-normal">mixed currencies</span> : null}</dt>
             <dd className="figure text-accent text-xl font-medium leading-none">
-              {activity ? formatMoney(data.totals.total_cost, currency) : "—"}
+              {activity && currency ? formatMoney(data.totals.total_cost, currency) : activity ? "—" : "—"}
             </dd>
           </div>
         </dl>

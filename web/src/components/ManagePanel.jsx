@@ -55,9 +55,9 @@ function CustomerRow({ customer, busy, onSave, onArchive }) {
 }
 
 function ProjectRow({ project, customers, busy, onSave, onArchive }) {
-  const [draft, setDraft, dirty] = useDraft({ name: project.name, budgetType: project.budget_type || "hourly", rate: String(project.rate ?? 0), customerId: project.customer_id, imageUrl: project.image_url || "" });
+  const [draft, setDraft, dirty] = useDraft({ name: project.name, budgetType: project.budget_type || "hourly", rate: String(project.rate ?? 0), customerId: project.customer_id, currency: project.currency || "", imageUrl: project.image_url || "" });
   const client = customers.find((c) => c.id === project.customer_id);
-  const currency = client?.currency || "USD";
+  const currency = draft.currency || client?.currency || "USD";
   return (
     <tr className="border-b border-base-300">
       <td className="py-2"><span className="flex items-center gap-2"><ImagePicker value={draft.imageUrl} name={draft.name} label="Project image" onChange={(imageUrl) => setDraft({ ...draft, imageUrl })} /><input className="input input-sm w-full max-w-[16rem]" value={draft.name} aria-label="Project name" onChange={(e) => setDraft({ ...draft, name: e.target.value })} /><Link className="link link-hover text-xs ink-muted" to={`/projects/${project.id}`}>view</Link></span></td>
@@ -65,9 +65,10 @@ function ProjectRow({ project, customers, busy, onSave, onArchive }) {
         <select className="select select-sm" value={draft.customerId} aria-label="Project client" onChange={(e) => setDraft({ ...draft, customerId: e.target.value })}>{customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
         {client ? <Link className="link link-hover ml-2 text-xs ink-muted" to={`/clients/${client.id}`}>client</Link> : null}
       </td>
+      <td className="py-2"><CurrencySelect value={currency} onChange={(value) => setDraft({ ...draft, currency: value === (client?.currency || "USD") ? "" : value })} /></td>
       <td className="py-2"><span className="flex items-center gap-2"><input type="number" min="0" step="0.01" className="input input-sm figure w-28" aria-label="Project rate" value={draft.rate} onChange={(e) => setDraft({ ...draft, rate: e.target.value })} /><span className="text-sm ink-muted">per hour</span></span></td>
-      <td className="py-2 text-sm ink-muted">{Number(draft.rate) === 0 ? `bills ${client ? formatMoney(client.hourly_rate, currency) : "—"}/h from ${client?.name ?? "the client"}` : `${formatMoney(draft.rate, currency)}/h`}</td>
-      <td className="py-2 text-right"><div className="flex justify-end gap-2"><SaveButton dirty={dirty} busy={busy} onClick={() => onSave({ name: draft.name, customerId: draft.customerId, budgetType: draft.budgetType, rate: Number(draft.rate), imageUrl: draft.imageUrl })} /><ArchiveButton busy={busy} onClick={onArchive} /></div></td>
+      <td className="py-2 text-sm ink-muted">{Number(draft.rate) === 0 ? `inherits ${client?.name ?? "client"} rate: ${client ? formatMoney(client.hourly_rate, currency) : "—"}/h` : `${formatMoney(draft.rate, currency)}/h`}</td>
+      <td className="py-2 text-right"><div className="flex justify-end gap-2"><SaveButton dirty={dirty} busy={busy} onClick={() => onSave({ name: draft.name, customerId: draft.customerId, budgetType: draft.budgetType, rate: Number(draft.rate), currency: draft.currency, imageUrl: draft.imageUrl })} /><ArchiveButton busy={busy} onClick={onArchive} /></div></td>
     </tr>
   );
 }
@@ -116,8 +117,9 @@ export default function ManagePanel({
   onRestoreActivity,
 }) {
   const [customer, setCustomer] = useState({ name: "", currency: "USD", hourlyRate: "", imageUrl: "" });
-  const [project, setProject] = useState({ customerId: "", name: "", rate: "", defaultTasks: "General, Meeting", imageUrl: "" });
+  const [project, setProject] = useState({ customerId: "", name: "", rate: "", currency: "", defaultTasks: "General, Meeting", imageUrl: "" });
   const [activity, setActivity] = useState({ name: "", emoji: "", imageUrl: "" });
+  const selectedProjectClient = customers.find((c) => c.id === project.customerId);
   const [showArchived, setShowArchived] = useState(false);
   const [clientPage, setClientPage] = useState(0);
   const [projectPage, setProjectPage] = useState(0);
@@ -140,7 +142,7 @@ export default function ManagePanel({
   const addCustomer = () => onCreate(() => createCustomer({ name: customer.name, currency: customer.currency, hourlyRate: Number(customer.hourlyRate || 0), imageUrl: customer.imageUrl }), `Client "${customer.name}" added.`).then((result) => result.ok && setCustomer({ name: "", currency: "USD", hourlyRate: "", imageUrl: "" }));
   // Projects inherit the client's currency at render time (formatMoney via client), so
   // no currency field is needed on the project form or row.
-  const addProject = () => onCreate(() => createProject({ customerId: project.customerId, name: project.name, budgetType: "hourly", rate: Number(project.rate || 0), defaultTasks: project.defaultTasks.split(",").map((task) => task.trim()).filter(Boolean), imageUrl: project.imageUrl }), `Project "${project.name}" added.`).then((result) => result.ok && setProject({ ...project, name: "", rate: "", imageUrl: "" }));
+  const addProject = () => onCreate(() => createProject({ customerId: project.customerId, name: project.name, budgetType: "hourly", rate: Number(project.rate || 0), currency: project.currency || selectedProjectClient?.currency, defaultTasks: project.defaultTasks.split(",").map((task) => task.trim()).filter(Boolean), imageUrl: project.imageUrl }), `Project "${project.name}" added.`).then((result) => result.ok && setProject({ ...project, name: "", rate: "", imageUrl: "" }));
   const addActivity = () => onCreate(() => createActivity({ name: activity.name, emoji: activity.emoji, imageUrl: activity.imageUrl }), `Activity "${activity.name}" added.`).then((result) => result.ok && setActivity({ name: "", emoji: "", imageUrl: "" }));
 
   const archivedCount = archivedCustomers.length + archivedProjects.length + archivedActivities.length;
@@ -168,10 +170,11 @@ export default function ManagePanel({
         <button type="button" className="btn btn-primary btn-sm justify-self-start" disabled={busy || !customer.name.trim()} onClick={addCustomer}><Icon name="plus" size={15} />{busy ? "Adding…" : "Add client"}</button>
       </div>
 
-      <div className="mt-3 grid grid-cols-2 items-end gap-x-5 gap-y-4 bg-base-200 p-4 sm:grid-cols-[auto_1fr_auto_auto_1fr_auto]">
+      <div className="mt-3 grid grid-cols-2 items-end gap-x-5 gap-y-4 bg-base-200 p-4 sm:grid-cols-[auto_1fr_auto_auto_auto_1fr_auto]">
         <div className="flex items-end"><ImagePicker value={project.imageUrl} name={project.name} label="Project image" onChange={(imageUrl) => setProject({ ...project, imageUrl })} /></div>
         <div className="min-w-[10rem]"><label className="field-label" htmlFor="proj-name">New project</label><input id="proj-name" className="input input-sm w-full" placeholder="Brand refresh" value={project.name} onChange={(e) => setProject({ ...project, name: e.target.value })} /></div>
-        <div><label className="field-label" htmlFor="proj-customer">Client</label><select id="proj-customer" className="select select-sm max-w-44" value={project.customerId} onChange={(e) => setProject({ ...project, customerId: e.target.value })}>{customers.length === 0 ? <option value="">add a client first</option> : null}{customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+        <div><label className="field-label" htmlFor="proj-customer">Client</label><select id="proj-customer" className="select select-sm max-w-44" value={project.customerId} onChange={(e) => setProject({ ...project, customerId: e.target.value, currency: "" })}>{customers.length === 0 ? <option value="">add a client first</option> : null}{customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+        <div><label className="field-label" htmlFor="proj-currency">Currency</label><CurrencySelect id="proj-currency" value={project.currency || selectedProjectClient?.currency || "USD"} onChange={(value) => setProject({ ...project, currency: value === (selectedProjectClient?.currency || "USD") ? "" : value })} /></div>
         <div><label className="field-label" htmlFor="proj-rate">Rate per hour</label><input id="proj-rate" type="number" min="0" step="0.01" className="input input-sm figure w-28" value={project.rate} onChange={(e) => setProject({ ...project, rate: e.target.value })} /></div>
         <div className="min-w-[12rem]"><label className="field-label" htmlFor="proj-default-tasks">Default tasks</label><input id="proj-default-tasks" className="input input-sm w-full" value={project.defaultTasks} onChange={(e) => setProject({ ...project, defaultTasks: e.target.value })} placeholder="General, Meeting" /><p className="mt-1 text-xs ink-muted">Comma-separated; leave blank for none.</p></div>
         <button type="button" className="btn btn-primary btn-sm justify-self-start" disabled={busy || !project.name.trim() || !project.customerId} onClick={addProject}><Icon name="plus" size={15} />{busy ? "Adding…" : "Add project"}</button>
@@ -186,7 +189,7 @@ export default function ManagePanel({
       </div>
 
       <div className="mt-10"><h3 className="mb-2 text-base font-semibold">Clients{customers.length > PAGE_SIZE ? <span className="ml-2 text-xs ink-muted">{customers.length} total</span> : null}</h3><p className="ink-muted mb-3 text-sm">The client's currency is used for every rate and billed amount on their projects and entries.</p><div className="overflow-x-auto"><table className="table table-sm"><thead><ListHead><th>Name</th><th>Currency</th><th>Rate</th><th /></ListHead></thead><tbody>{customers.length ? clientSlice.map((customerItem) => <CustomerRow key={customerItem.id} customer={customerItem} busy={busy} onSave={(patch) => onSaveCustomer(customerItem.id, patch)} onArchive={() => onArchiveCustomer(customerItem.id)} />) : <tr><td colSpan="4" className="py-6 text-sm ink-muted">No clients yet. Add your first client above to define a currency and hourly rate.</td></tr>}</tbody></table></div><Pager page={clientPage} pages={clientPages} onPage={setClientPage} /></div>
-      <div className="mt-8"><h3 className="mb-2 text-base font-semibold">Projects{projects.length > PAGE_SIZE ? <span className="ml-2 text-xs ink-muted">{projects.length} total</span> : null}</h3><div className="overflow-x-auto"><table className="table table-sm"><thead><ListHead><th>Name</th><th>Client</th><th>Rate</th><th>Bills</th><th /></ListHead></thead><tbody>{projects.length ? projectSlice.map((projectItem) => <ProjectRow key={projectItem.id} project={projectItem} customers={customers} busy={busy} onSave={(patch) => onSaveProject(projectItem.id, patch)} onArchive={() => onArchiveProject(projectItem.id)} />) : <tr><td colSpan="5" className="py-6 text-sm ink-muted">No projects yet. Add a client first, then create the project you will track time against.</td></tr>}</tbody></table></div><Pager page={projectPage} pages={projectPages} onPage={setProjectPage} /></div>
+      <div className="mt-8"><h3 className="mb-2 text-base font-semibold">Projects{projects.length > PAGE_SIZE ? <span className="ml-2 text-xs ink-muted">{projects.length} total</span> : null}</h3><div className="overflow-x-auto"><table className="table table-sm"><thead><ListHead><th>Name</th><th>Client</th><th>Currency</th><th>Rate</th><th>Bills</th><th /></ListHead></thead><tbody>{projects.length ? projectSlice.map((projectItem) => <ProjectRow key={projectItem.id} project={projectItem} customers={customers} busy={busy} onSave={(patch) => onSaveProject(projectItem.id, patch)} onArchive={() => onArchiveProject(projectItem.id)} />) : <tr><td colSpan="6" className="py-6 text-sm ink-muted">No projects yet. Add a client first, then create the project you will track time against.</td></tr>}</tbody></table></div><Pager page={projectPage} pages={projectPages} onPage={setProjectPage} /></div>
       <div className="mt-8"><h3 className="mb-2 text-base font-semibold">Activities{activities.length > PAGE_SIZE ? <span className="ml-2 text-xs ink-muted">{activities.length} total</span> : null}</h3><div className="overflow-x-auto"><table className="table table-sm"><tbody>{activities.length ? activitySlice.map((activityItem) => <ActivityRow key={activityItem.id} activity={activityItem} busy={busy} onSave={(patch) => onSaveActivity(activityItem.id, patch)} onArchive={() => onArchiveActivity(activityItem.id)} />) : <tr><td className="py-6 text-sm ink-muted">No activities yet. Add a shared activity such as Development, Design, or Meeting.</td></tr>}</tbody></table></div><Pager page={activityPage} pages={activityPages} onPage={setActivityPage} /></div>
 
       {showArchived ? (
