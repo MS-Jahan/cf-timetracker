@@ -1,67 +1,56 @@
-# CSV import — feature plan
+# CSV import — Kimai export format is the canonical format
 
 **Date:** 2026-09-20
-**Status:** planned, not yet implemented. This doc defines the contract so implementation can start without re-deciding anything. Companion tooling that exists today: `scripts/kimai-export.mjs` (pushes this tracker's data out to a Kimai instance via its API).
+**Status:** script-based import shipped (`scripts/kimai-import.mjs`); in-app UI planned below.
 
-## Goal
+## Decision
 
-Users bring a CSV file (from Kimai, Clockify, Toggl, a spreadsheet, or anywhere), upload it in Settings, preview what will happen, confirm, and get clients/projects/activities created (matched by name) plus all closed entries inserted. No code, no API tokens.
+The app officially supports **one import format: Kimai's own CSV export**. Anyone with data in another system (Clockify, Toggl, a spreadsheet) converts it to that column layout themselves — programmatically or by hand — then imports here. We do not maintain per-tool adapters.
 
-## CSV contract
+Rationale: one contract to test and document; Kimai is the app's explicit reference point; the format is rich enough (currency, hourly price, tags) to carry everything the tracker models.
 
-Required header row; column order does not matter. Header matching is case/space-insensitive with the aliases below.
+## The format (Kimai export CSV)
 
-| Column | Aliases | Required | Format / rules |
-|---|---|---|---|
-| `Customer` | `Client`, `Kunde` | yes | Creates the client if the exact name doesn't exist |
-| `Project` | — | yes | Created under its customer if missing |
-| `Activity` | `Task` | yes | Created as a shared activity if missing |
-| `Start Time` | `Begin` | yes | ISO 8601 (`2026-09-20 14:30`, `2026-09-20T14:30:00Z`, `20.09.2026 14:30`) |
-| `End Time` | `Stop` | yes | Same formats; must be after start |
-| `Description` | `Note` | no | Free text, ≤500 chars |
-| `Tags` | — | no | Comma- or semicolon-separated |
-| `Hourly Rate` | `Rate` | no | Number; defaults to project rate → client rate → 0 |
-| `Currency` | — | no | 3-letter code, applied when **creating** a client (existing clients keep theirs) |
-| `Entry ID` | `ID` | no | Dedupe key — see idempotency |
+Header row required; column order free; these columns are read:
 
-Rows with an empty End Time (a "running" row) are skipped and reported. Max file size 5 MB / 10,000 rows for v1.
+| Kimai column | Used for |
+|---|---|
+| `Date`, `From`, `To` | entry start/end. Naive local wall-clock, interpreted in `KIMAI_TZ` (default `Asia/Dhaka`). `To` past midnight rolls to the next day. Rows without `To` (running) are skipped |
+| `Customer` | client, created when missing (exact-name match) |
+| `Project` | project under its customer, created when missing |
+| `Activity` | shared activity, created when missing |
+| `Currency` | client's currency (existing clients keep theirs) |
+| `Hourly price` | entry-level rate; cost is recomputed server-side from duration × rate |
+| `Description` | entry note |
+| `Tags` | stored as-is (comma/semicolon string) |
 
-## UX flow (Settings → Import)
+Ignored: `Duration`, `Price`, `Internal price`, `Fixed price`, `Name`, `User`, `E-mail`, `Staff number`, `Billable`, `Type`, `category`, `Account`, `Project number`, `VAT-ID`, `Order number`.
 
-1. **Upload** — file picker + drag & drop; parsed entirely client-side (no upload yet).
-2. **Preview** — table of the first 20 rows as they will land, plus counts: "will create 2 clients, 3 projects, 4 activities, 87 entries; 3 rows will be skipped." Skipped rows list their reason (bad date, missing project, end before start).
-3. **Confirm** — rows POST to the worker in one request; progress state; summary toast; ledger reload.
-4. **Result** — per-row failures stay visible until dismissed, downloadable as CSV.
+## What shipped today
 
-## Worker API
+- **Worker:** `POST /api/entries` — creates a closed entry (import path only; the timer keeps using `/api/timer/start` so the single-running-timer rule is untouched). Validates FKs, project↔client, task linkage, time order; derives `duration_seconds` and `cost` server-side, never trusting input.
+- **`scripts/kimai-import.mjs`:** parses a Kimai export, plans master-data creation, then imports. DRY_RUN=1 prints the plan and writes nothing. Dedupe: a row whose (project, activity, start) already exists is skipped, so re-running the same file adds nothing. Used to import the real Kimai dump (290 entries, 1 client, 9 projects — verified: second run imported 0, skipped 290).
 
-`POST /api/import/csv` — body `{ rows: [...], dryRun: boolean }`. The client parses the CSV; the worker owns the transactional logic (this keeps parsing/encoding issues out of the Worker and the same endpoint ready for future CLI use):
+## In-app UI (planned, Settings → Import)
 
-- Match/create masters by exact trimmed name (same logic as `resetDemoData` — resolve real ids after insert; activities.name is UNIQUE).
-- Validate: required fields, parseable times, end > start, FK resolution, rate numbers, currency code validity.
-- Insert entries with `crypto.randomUUID()` ids; `duration_seconds` and `cost` computed the same way as the timer path (never trusted from the CSV).
-- Response: `{ created: { customers, projects, activities, entries }, skipped: [{ row, reason }] }`.
-- Caps: 10,000 rows per request; worker CPU-safe (single D1 batch).
+1. **Upload** — file picker + drag & drop; parsed client-side, nothing sent yet.
+2. **Preview** — first 20 mapped rows + counts ("will create 1 client, 3 projects, 87 entries; 2 rows skipped") via `POST /api/import/csv` with `dryRun: true`; skipped rows listed with reasons.
+3. **Confirm** — same endpoint with `dryRun: false`; summary toast; ledger reload.
+4. **Result** — per-row failures remain visible, downloadable as CSV.
+
+The worker endpoint wraps the exact logic of `kimai-import.mjs` (match-or-create masters, server-side duration/cost, same dedupe), so script and UI never diverge.
+
+## Converting other CSVs to the Kimai format
+
+Document a recipe per common source (Clockify, Toggl, Excel timesheet): rename/re-map columns to `Date, From, To, Customer, Project, Activity, Currency, Hourly price, Description, Tags`, merge date+time into Kimai's two-column style, and save as UTF-8 CSV. A `convert/` folder with tiny example scripts can live under `scripts/` later.
 
 ## Idempotency
 
-- If a row carries `Entry ID`, the worker stores it in a new `external_id` column (unique index) and skips rows whose external id already exists → re-uploading the same file adds nothing.
-- Without `Entry ID`: optional "skip rows matching an existing entry (same client + project + activity + start time)" checkbox, default on.
+- Current: (project, activity, start) dedupe — re-running is safe.
+- Planned addition: honor Kimai's exported `ID`-like column if present in future exports (new `external_id` column with a unique index) for exact re-imports.
 
-## Permissions / safety
+## Out of scope
 
-- Import writes real data; only expose the UI section to the owner (there is no multi-user concept yet — the whole app is single-tenant).
-- `dryRun: true` performs all validation and master-match resolution but writes nothing — the preview button uses it, so "what will this create?" is always accurate before committing.
-- Import never touches existing rows: no updates, no deletes, no re-rates.
-
-## Implementation phases
-
-1. **P1 — worker endpoint + tests**: `POST /api/import/csv` with `dryRun`, `external_id` column + migration, unit tests for the matcher and validators.
-2. **P2 — Settings UI**: upload → preview → confirm flow, result reporting.
-3. **P3 — templates**: downloadable sample CSV (Kimai-compatible column names) and a "copy for Kimai's importer" export variant on the ledger page, so the same file can round-trip through Kimai's own CSV importer plugin.
-
-## Explicitly out of scope (v1)
-
-- Editing/merging existing entries on import
-- Multiple currencies per client (client's currency wins)
-- XLSX/ODS (CSV/TSV only), files > 10k rows (split them)
+- Updating/merging existing entries on import (import only adds)
+- XLSX/ODS (CSV only), >10k rows per run (split the file)
+- Per-tool import adapters (convert to Kimai format instead)

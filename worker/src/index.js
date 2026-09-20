@@ -25,6 +25,7 @@ import {
   updateActivity,
   updateCustomer,
   updateProject,
+  createTimeEntry,
   updateTimeEntry,
   setArchived,
 } from "./core.js";
@@ -298,6 +299,17 @@ export default {
 
       // 8. Historical entries — edit any closed entry, including its time range.
       const entryMatch = matchCollection(pathname, "entries");
+      if (method === "POST" && pathname === "/api/entries") {
+        // Closed-entry create: the import path (CSV/Kimai). Timer starts must go
+        // through /api/timer/start so the single-running-timer rule holds.
+        const body = await readJson(request);
+        if (!body) return jsonResponse(request, env, { error: "Invalid JSON body" }, 400);
+        const result = await createTimeEntry(env, body);
+        if (result.status !== "ok") {
+          return jsonResponse(request, env, { error: result.error }, STATUS_CODES[result.status] || 400);
+        }
+        return jsonResponse(request, env, { success: true, entry: result.entry }, 201);
+      }
       if (method === "PATCH" && entryMatch?.id) {
         const body = await readJson(request);
         if (!body) return jsonResponse(request, env, { error: "Invalid JSON body" }, 400);

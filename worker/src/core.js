@@ -1017,6 +1017,62 @@ export async function parseVoiceTask(env, { audioBase64, mimeType = "audio/webm"
   };
 }
 
+/**
+ * Create a closed entry directly — imports only (CSV/Kimai), never the timer path.
+ * Times are epoch milliseconds; duration and cost are derived, never trusted from input.
+ */
+export async function createTimeEntry(env, body = {}) {
+  const customerId = body.customerId;
+  const projectId = body.projectId;
+  const activityId = body.activityId;
+  if (isBlank(customerId) || isBlank(projectId) || isBlank(activityId)) {
+    return { status: "invalid", error: "customerId, projectId and activityId are required" };
+  }
+
+  const missing = await validateRefs(env, customerId, projectId, activityId);
+  if (missing.length) return { status: "invalid", error: `Unknown ids: ${missing.join(", ")}` };
+  if (!(await validateTaskForProject(env, projectId, activityId))) {
+    return { status: "invalid", error: "activityId is not enabled as a task for this project" };
+  }
+
+  const project = await env.DB.prepare("SELECT customer_id FROM projects WHERE id = ?").bind(projectId).first();
+  if (project.customer_id !== customerId) {
+    return { status: "invalid", error: "projectId does not belong to customerId" };
+  }
+
+  const startTime = asTimestamp(body.startTime);
+  const endTime = asTimestamp(body.endTime);
+  if (!Number.isFinite(startTime) || !Number.isFinite(endTime)) {
+    return { status: "invalid", error: "startTime and endTime must be timestamps in milliseconds" };
+  }
+  if (endTime <= startTime) return { status: "invalid", error: "endTime must be after startTime" };
+
+  let applied;
+  if (body.hourlyRate === undefined) {
+    applied = await resolveRate(env, projectId, customerId, null);
+  } else {
+    const rate = asRate(body.hourlyRate);
+    const rateError = badRate(rate);
+    if (rateError) return { status: "invalid", error: `hourlyRate ${rateError}` };
+    applied = rate;
+  }
+
+  const durationSeconds = Math.max(1, Math.round((endTime - startTime) / 1000));
+  const cost = (durationSeconds / 3600) * (applied || 0);
+  const id = crypto.randomUUID();
+  const description = String(body.description ?? "");
+  const tags = String(body.tags ?? "");
+
+  await env.DB.prepare(`
+    INSERT INTO time_entries
+      (id, customer_id, project_id, activity_id, description, tags, start_time, end_time, duration_seconds, rate_applied, cost, is_running)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+  `).bind(id, customerId, projectId, activityId, description, tags, startTime, endTime, durationSeconds, applied, cost).run();
+
+  const entry = await env.DB.prepare("SELECT * FROM time_entries WHERE id = ?").bind(id).first();
+  return { status: "ok", entry };
+}
+
 export async function updateTimeEntry(env, id, patch = {}) {
   const unknown = Object.keys(patch).filter((key) => !ENTRY_FIELDS.has(key));
   if (unknown.length) return { status: "invalid", error: `Unknown fields: ${unknown.join(", ")}` };
