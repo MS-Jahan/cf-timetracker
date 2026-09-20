@@ -4,7 +4,7 @@ import EntryForm from "../components/EntryForm.jsx";
 import Ledger from "../components/Ledger.jsx";
 import { API_BASE, fetchAllEntries, startTimer, stopTimer, updateTimeEntry } from "../lib/api.js";
 import { buildCsv, downloadCsv, utcMonth } from "../lib/format.js";
-import { Link } from "../lib/router.jsx";
+import { Link, navigate } from "../lib/router.jsx";
 import Icon from "../components/Icon.jsx";
 
 const PERIOD_KEY = "cf-tt-ledger-period";
@@ -246,7 +246,11 @@ export default function TrackerPage({ tracker }) {
                 <Icon name="download" size={15} />
                 Download CSV
               </button>
-              <button type="button" className="btn btn-ghost btn-sm ring-1 ring-inset ring-base-300" onClick={() => window.print()}>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm ring-1 ring-inset ring-base-300"
+                onClick={() => navigate(`/print?month=${encodeURIComponent(period)}&client=${encodeURIComponent(clientFilter)}&project=${encodeURIComponent(projectFilter)}`)}
+              >
                 <Icon name="print" size={15} />
                 Print timesheet
               </button>

@@ -2,6 +2,12 @@
    Professional layout: header → summary → entries table.
    Mobile-responsive: scales gracefully from A4 to letter to mobile print. */
 
+/* Every printed page gets the same A4 margins, regardless of entry count. */
+@page {
+  size: A4 portrait;
+  margin: 12mm;
+}
+
 /* Screen: hide the print-only header */
 .print-header {
   display: none;
@@ -212,10 +218,14 @@
   table.print-entries-table col.col-total { width: 10%; }
   table.print-entries-table col.col-note { width: 18%; }
 
-  /* Footer */
+  /* Footer — fixed within the page box so Chromium repeats it on every
+     printed page of a multi-page timesheet. */
   .print-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
     display: block !important;
-    margin-top: 8mm;
     padding-top: 3mm;
     border-top: 1px solid #ccc;
     font-size: 8pt;

@@ -3,6 +3,7 @@ import DashboardPage from "./pages/DashboardPage.jsx";
 import ClientDetailPage from "./pages/ClientDetailPage.jsx";
 import ProjectDetailPage from "./pages/ProjectDetailPage.jsx";
 import ActivityDetailPage from "./pages/ActivityDetailPage.jsx";
+import PrintPage from "./pages/PrintPage.jsx";
 import ThemeToggle from "./components/ThemeToggle.jsx";
 import Icon from "./components/Icon.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
@@ -126,6 +127,12 @@ export default function App() {
 
   if (showSplash) {
     return <SplashScreen onDone={handleSplashDone} />;
+  }
+
+  // The print view renders bare — no sidebar, timer bar, or banner — so the
+  // print dialog only ever sees the timesheet.
+  if (path === "/print") {
+    return <PrintPage />;
   }
 
   return (

@@ -35,13 +35,9 @@ Storage/display are already correct by design; documenting here so it is on reco
 - [x] **T13 — Print footer leaks onto screen.** Root cause: `.print-footer` has no screen rule (only print rules in `print.css`), so it renders at the bottom of the ledger page. Fix: `display: none` on screen, visible only inside `@media print`.
 - [x] **T14 — Emoji picker: bigger catalog, escape the table cell.** Fixes: catalog expanded (~100 → ~260 emojis across work/common categories); popup switches from `absolute` (clipped by table `overflow-x-auto`) to `position: fixed` anchored via `getBoundingClientRect()`, z-index above page chrome; closes on scroll/resize.
 
-## VI. Printing system (planned — not started)
+## VI. Printing system
 
-- [ ] **T15 — Dedicated print page instead of `@media print` on the ledger.** Today "Print" runs `window.print()` on the live page and relies on `no-print` classes; anything missed prints the whole UI. Decision: option 2 of the two proposed (redirect to a print-optimized page, not a popup — popups fight browser blockers and complicate multi-page layout).
-  - New route `/print` (query: period/filters or explicit entry ids) rendering ONLY the timesheet: header, summary table, entries table, footer — reusing `buildSummary()` and the print markup, no app chrome.
-  - Page auto-calls `window.print()` once on load (with a visible "Print" button for retry), `@page` margins defined so every printed page keeps margins and the bottom footer line (CSS `position: fixed; bottom: 0` footer repeats per printed page in most engines; verify Chromium/Firefox, fall back to a repeated footer row if not).
-  - Ledger's Print button becomes `navigate("/print?…")` carrying the current filters.
-  - Multi-page acceptance check: a 290-entry timesheet prints with correct margins on every page and the footer line present.
+- [x] **T15 — Dedicated print page instead of `@media print` on the ledger.** Shipped: new `/print?month=&client=&project=` route renders only the timesheet (no app chrome), auto-opens the print dialog once with an on-screen toolbar for retries; Ledger's "Print timesheet" now navigates there carrying the active filters. `@page` A4 margins apply to every printed page; the footer line is fixed to the page box so Chromium repeats it across a multi-page timesheet. Verified live: 290-entry timesheet renders bare with correct header/summary/entries and month scoping (July = 30 rows).
 
 ## Verification
 
