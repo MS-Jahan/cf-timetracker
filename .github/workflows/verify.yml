@@ -1,0 +1,38 @@
+name: Verify
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verification:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            worker/package-lock.json
+            web/package-lock.json
+
+      - name: Install worker dependencies
+        run: npm ci
+        working-directory: worker
+
+      - name: Install web dependencies
+        run: npm ci
+        working-directory: web
+
+      - name: Prepare local D1 database
+        working-directory: worker
+        run: |
+          npx wrangler d1 execute cf-timetracker --local --file=../db/schema.sql --yes
+          npx wrangler d1 execute cf-timetracker --local --file=../db/seed.sql --yes
+
+      - name: Run verification gate
+        run: npm run verify
