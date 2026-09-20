@@ -1,0 +1,3 @@
+# Cloudflare Pages SPA fallback: serve the app for any non-asset path so
+# slash-based routes like /settings work on a hard refresh or deep link.
+/*  /index.html  200

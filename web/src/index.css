@@ -1,0 +1,270 @@
+@import "tailwindcss";
+
+/* daisyUI components, themed by the two custom themes below. Nothing built-in is
+   enabled: this app has one visual identity, not a catalogue of 35. */
+@plugin "daisyui" {
+  themes: ledger --default, ledger-dark --prefersdark;
+}
+
+/* ------------------------------------------------------------------ themes */
+
+/* "ledger": blue-black ink on cool paper. Red pen is the single accent. */
+@plugin "daisyui/theme" {
+  name: "ledger";
+  default: true;
+  prefersdark: false;
+  color-scheme: light;
+
+  --color-base-100: #ffffff; /* the sheet */
+  --color-base-200: #eff2f5; /* the desk */
+  --color-base-300: #c9d0d9; /* hairline rule */
+  --color-base-content: #16233d; /* ink */
+
+  --color-primary: #16233d;
+  --color-primary-content: #ffffff;
+  --color-secondary: #46536b;
+  --color-secondary-content: #ffffff;
+  --color-accent: #c22b21; /* red pen: live, and the amount owed */
+  --color-accent-content: #ffffff;
+  --color-neutral: #dde2e8;
+  --color-neutral-content: #16233d;
+  --color-info: #2a5db0;
+  --color-info-content: #ffffff;
+  --color-success: #1f6f4a;
+  --color-success-content: #ffffff;
+  --color-warning: #8a5f00;
+  --color-warning-content: #ffffff;
+  --color-error: #c22b21;
+  --color-error-content: #ffffff;
+
+  /* A form, not a card kit: no radii, no depth, no texture. */
+  --radius-selector: 0rem;
+  --radius-field: 0.125rem;
+  --radius-box: 0rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+/* "ledger-dark": the same sheet under a desk lamp. */
+@plugin "daisyui/theme" {
+  name: "ledger-dark";
+  default: false;
+  prefersdark: true;
+  color-scheme: dark;
+
+  --color-base-100: #1b2029;
+  --color-base-200: #14181f;
+  --color-base-300: #2c3440;
+  --color-base-content: #e7ebf1;
+
+  --color-primary: #e7ebf1;
+  --color-primary-content: #14181f;
+  --color-secondary: #a9b4c4;
+  --color-secondary-content: #14181f;
+  --color-accent: #e4594c;
+  --color-accent-content: #1b2029;
+  --color-neutral: #262d38;
+  --color-neutral-content: #e7ebf1;
+  --color-info: #7ba7e8;
+  --color-info-content: #14181f;
+  --color-success: #6fbf94;
+  --color-success-content: #14181f;
+  --color-warning: #d9a742;
+  --color-warning-content: #14181f;
+  --color-error: #e4594c;
+  --color-error-content: #14181f;
+
+  --radius-selector: 0rem;
+  --radius-field: 0.125rem;
+  --radius-box: 0rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+/* -------------------------------------------------------------------- type */
+
+/* IBM Plex: one superfamily, two widths. The mono is for figures only. */
+@theme {
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+}
+
+/* Class-based dark variant, kept in sync with data-theme by lib/theme.js. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+body {
+  @apply min-h-screen bg-base-200 text-base-content antialiased;
+  font-size: 0.9375rem; /* 15px */
+}
+
+/* Every figure in the app: tabular so columns line up when you scan them. */
+@utility figure {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* One secondary ink tone, chosen to clear 4.5:1 on the sheet in either theme (5.5:1
+   light, 7.0:1 dark). The 45-60% greys the first pass used as decoration failed that
+   floor, so anything lighter than this is a mark, never text. */
+@utility ink-muted {
+  color: color-mix(in oklab, var(--color-base-content) 68%, transparent);
+}
+
+/* Sentence-case field label, at the same accessible tone as body ink-muted. */
+@utility field-label {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: color-mix(in oklab, var(--color-base-content) 68%, transparent);
+}
+
+/* Rules carry the structure. */
+@utility rule {
+  border-top: 1px solid var(--color-base-300);
+}
+
+@utility rule-strong {
+  border-top: 2px solid var(--color-base-content);
+}
+
+/* The closed-sum convention: a double rule above a total. */
+@utility rule-double {
+  border-top: 1px solid var(--color-base-content);
+  box-shadow: 0 3px 0 -2px var(--color-base-content);
+}
+
+/* A message band: a rule, a red left mark for failures, ink for notices. */
+@utility band {
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+  border-left: 3px solid transparent;
+  border-top: 1px solid var(--color-base-300);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+}
+
+@utility band-error {
+  border-left-color: var(--color-accent);
+  background: color-mix(in oklab, var(--color-accent) 7%, transparent);
+  color: var(--color-accent);
+}
+
+@utility band-notice {
+  border-left-color: color-mix(in oklab, var(--color-base-content) 35%, transparent);
+  background: color-mix(in oklab, var(--color-base-content) 4%, transparent);
+}
+
+/* Focus is visible everywhere, not just on inputs. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  /* daisyUI's default soft shadows read as decoration here. */
+  .btn,
+  .input,
+  .select,
+  .table {
+    box-shadow: none;
+  }
+
+  /* Fields on the form line share one height so the row is flush. */
+  .input-sm,
+  .select-sm {
+    height: 2rem;
+  }
+}
+
+/* ------------------------------------------------------------------ animations */
+
+/* All animations are gated behind prefers-reduced-motion so they vanish for
+   users who prefer reduced motion. Duration and easing are kept short and
+   non-distracting — this is a ledger, not a game. */
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes progressFill {
+  from { width: 0%; }
+  to { width: 100%; }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@keyframes splashFadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; pointer-events: none; }
+}
+
+@utility animate-fade-in {
+  animation: fadeIn 200ms ease-out both;
+}
+
+@utility animate-slide-down {
+  animation: slideDown 200ms ease-out both;
+}
+
+@utility animate-slide-up {
+  animation: slideUp 200ms ease-out both;
+}
+
+@utility animate-scale-in {
+  animation: scaleIn 400ms ease-out both;
+}
+
+@utility animate-progress {
+  animation: progressFill 1200ms ease-in-out forwards;
+}
+
+@utility animate-pulse-dot {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@utility animate-fade-out {
+  animation: splashFadeOut 400ms ease-in forwards;
+}
+
+/* Page content enters with a subtle fade+slide */
+@utility page-enter {
+  animation: slideUp 250ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
