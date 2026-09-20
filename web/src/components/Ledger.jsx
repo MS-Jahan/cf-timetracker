@@ -91,7 +91,7 @@ export default function Ledger({ entries, scopeLabel, onEdit, emptyMessage }) {
         </div>
         <p className="print-period">
           Period: {period}<br />
-          Generated: {generatedDate}<br />
+          Printed: {generatedDate}<br />
           Entries: {closed.length} | Total: {toHours(totalSeconds)} hours | Amount: {formatMoney(totalCost, currency)}
         </p>
       </header>
@@ -227,7 +227,7 @@ export default function Ledger({ entries, scopeLabel, onEdit, emptyMessage }) {
 
       {/* Print-only footer */}
       <div className="print-footer no-print-hidden">
-        CS Time Tracker — Generated on {generatedDate} — {closed.length} entries, {toHours(totalSeconds)} hours
+        CS Time Tracker — Timesheet printed on {generatedDate} — {closed.length} entries, {toHours(totalSeconds)} hours
       </div>
     </section>
   );

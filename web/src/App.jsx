@@ -162,8 +162,8 @@ export default function App() {
         </div>
       )}
 
-      <main className="mx-auto flex min-h-dvh max-w-6xl flex-col border-x border-base-300 bg-base-100 lg:flex-row">
-      <aside className="no-print border-b border-base-300 px-5 py-5 lg:sticky lg:top-0 lg:flex lg:h-dvh lg:w-60 lg:shrink-0 lg:flex-col lg:border-b-0 lg:border-r lg:px-6 lg:py-8">
+      <main className="mx-auto flex min-h-dvh max-w-[88rem] flex-col border-x border-base-300 bg-base-100 lg:flex-row">
+      <aside className="no-print border-b border-base-300 px-5 py-5 lg:sticky lg:top-0 lg:flex lg:h-dvh lg:w-56 lg:shrink-0 lg:flex-col lg:border-b-0 lg:border-r lg:px-4 lg:py-8">
         <Link to="/" className="text-lg font-semibold tracking-tight">Timetracker</Link>
         <p className="ink-muted mt-1 text-sm">Billable hours, clearly kept.</p>
 

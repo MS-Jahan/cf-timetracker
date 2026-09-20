@@ -183,6 +183,15 @@ body {
   .select-sm {
     height: 2rem;
   }
+
+  /* Long labels must never run into the select's chevron: reserve the arrow
+     gutter and truncate instead of overlapping. */
+  .select {
+    padding-right: 2.5rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
+  }
 }
 
 /* ------------------------------------------------------------------ animations */

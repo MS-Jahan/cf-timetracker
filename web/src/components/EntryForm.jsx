@@ -108,7 +108,7 @@ export default function EntryForm({ customers, projects, activities, projectTask
             aria-required="true"
             onChange={(e) => setCustomerId(e.target.value)}
           >
-            <option value="">{customers.length ? "Choose…" : "Add a client in Settings first"}</option>
+            <option value="">{customers.length ? "Choose…" : "Add a client in Settings"}</option>
             {customers.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -152,7 +152,7 @@ export default function EntryForm({ customers, projects, activities, projectTask
             aria-required="true"
             onChange={(e) => setActivityId(e.target.value)}
           >
-            <option value="">{availableTasks.length ? "Choose…" : "Add a task on the project page first"}</option>
+            <option value="">{availableTasks.length ? "Choose…" : "Add a task on the project page"}</option>
             {availableTasks.map((task) => (
               <option key={task.activity_id || task.id} value={task.activity_id || task.id}>
                 {task.name}

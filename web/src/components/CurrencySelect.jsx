@@ -1,4 +1,4 @@
-import { CURRENCIES, currencyHint, currencyLabel } from "../lib/currencies.js";
+import { CURRENCIES, currencyLabel } from "../lib/currencies.js";
 
 /**
  * Currency picker used in Settings (client rows and the new-client form).
@@ -43,9 +43,7 @@ export default function CurrencySelect({ id, value, onChange, disabled = false, 
           />
           <span className="text-xs ink-muted">3-letter ISO code</span>
         </span>
-      ) : (
-        <span className="text-xs ink-muted">{currencyHint(value)}</span>
-      )}
+      ) : null}
       {known ? <span className="sr-only">{currencyLabel(value)}</span> : null}
     </span>
   );
