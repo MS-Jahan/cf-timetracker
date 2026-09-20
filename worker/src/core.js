@@ -1140,3 +1140,138 @@ export async function updateTimeEntry(env, id, patch = {}) {
     entry: await env.DB.prepare("SELECT * FROM time_entries WHERE id = ?").bind(id).first(),
   };
 }
+
+/* ------------------------------------------------------------------ imports */
+
+const IMPORT_MAX_ENTRIES = 1000;
+
+/**
+ * Batched CSV import (Kimai export format is canonical — see
+ * docs/2026-09-20-csv-import-plan.md). One request carries the masters plus up
+ * to IMPORT_MAX_ENTRIES rows, each entry referencing masters by NAME. The
+ * server match-or-creates the masters, dedupes rows against existing entries
+ * on (projectId, activityId, startTime), derives duration/cost server-side,
+ * and inserts every valid row in one D1 batch (atomic). Nothing is updated or
+ * deleted — import only adds.
+ *
+ * payload: { dryRun, customers: [{name, currency?, hourlyRate?}],
+ *            projects: [{customer, name}], activities: [name],
+ *            entries: [{customer, project, activity, startTime, endTime,
+ *                       description?, tags?, hourlyRate?}] }
+ * Returns { status, created, imported, skipped, dryRun } (or "invalid").
+ */
+export async function importCsvBatch(env, payload = {}) {
+  const dryRun = Boolean(payload.dryRun);
+  const customersIn = Array.isArray(payload.customers) ? payload.customers : [];
+  const projectsIn = Array.isArray(payload.projects) ? payload.projects : [];
+  const activitiesIn = Array.isArray(payload.activities) ? payload.activities : [];
+  const entriesIn = Array.isArray(payload.entries) ? payload.entries : [];
+  if (!entriesIn.length) return { status: "invalid", error: "entries[] is required" };
+  if (entriesIn.length > IMPORT_MAX_ENTRIES) {
+    return { status: "invalid", error: `entries[] is limited to ${IMPORT_MAX_ENTRIES} rows per request` };
+  }
+
+  // Masters — match by exact trimmed name, create when missing.
+  const customerId = new Map();
+  const created = { customers: 0, projects: 0, activities: 0 };
+  const skips = [];
+  for (const c of customersIn) {
+    const name = String(c?.name ?? "").trim();
+    if (!name) return { status: "invalid", error: "every customers[] row needs a name" };
+    const hit = await env.DB.prepare("SELECT id FROM customers WHERE name = ?").bind(name).first();
+    if (hit) { customerId.set(name, hit.id); continue; }
+    if (dryRun) continue;
+    const result = await createCustomer(env, { name, currency: c.currency, hourlyRate: c.hourlyRate });
+    if (result.status !== "ok") return { status: "invalid", error: `customer "${name}": ${result.error}` };
+    customerId.set(name, result.customer.id);
+    created.customers++;
+  }
+
+  const projectId = new Map();
+  for (const p of projectsIn) {
+    const name = String(p?.name ?? "").trim();
+    const customerName = String(p?.customer ?? "").trim();
+    if (!name || !customerName) return { status: "invalid", error: "every projects[] row needs name and customer" };
+    const key = `${customerName}\u0000${name}`;
+    const hit = await env.DB.prepare(
+      "SELECT p.id FROM projects p JOIN customers c ON c.id = p.customer_id WHERE p.name = ? AND c.name = ?"
+    ).bind(name, customerName).first();
+    if (hit) { projectId.set(key, hit.id); continue; }
+    if (dryRun) continue;
+    const result = await createProject(env, { customerId: customerId.get(customerName), name, budgetType: "hourly", rate: 0 });
+    if (result.status !== "ok") return { status: "invalid", error: `project "${name}": ${result.error}` };
+    projectId.set(key, result.project.id);
+    created.projects++;
+  }
+
+  for (const rawName of activitiesIn) {
+    const name = String(rawName ?? "").trim();
+    if (!name) return { status: "invalid", error: "activities[] rows must be names" };
+    const hit = await env.DB.prepare("SELECT id FROM activities WHERE name = ?").bind(name).first();
+    if (hit) continue;
+    if (dryRun) continue;
+    const result = await createActivity(env, { name });
+    if (result.status !== "ok") return { status: "invalid", error: `activity "${name}": ${result.error}` };
+    created.activities++;
+  }
+
+  // Existing-entry dedupe keys: (project, activity, start).
+  const existing = new Set();
+  if (!dryRun) {
+    const { results } = await env.DB.prepare("SELECT project_id, activity_id, start_time FROM time_entries").all();
+    for (const row of results) existing.add(`${row.project_id}|${row.activity_id}|${row.start_time}`);
+  }
+
+  // Validate every row first; only clean rows reach the batch.
+  const inserts = [];
+  for (let i = 0; i < entriesIn.length; i++) {
+    const row = entriesIn[i];
+    const fail = (reason) => skips.push({ row: i, reason });
+    const rowCustomer = String(row?.customer ?? "").trim();
+    const rowProject = String(row?.project ?? "").trim();
+    // Dry run never creates masters, so the id maps are empty — validate the
+    // name references without resolving them.
+    const customerIdValue = dryRun ? rowCustomer : customerId.get(rowCustomer);
+    const projectIdValue = dryRun ? `${rowCustomer}\u0000${rowProject}` : projectId.get(`${rowCustomer}\u0000${rowProject}`);
+    const activityIdValue = dryRun
+      ? String(row?.activity ?? "").trim()
+      : (await env.DB.prepare("SELECT id FROM activities WHERE name = ?").bind(String(row?.activity ?? "").trim()).first())?.id;
+    if (!customerIdValue || !projectIdValue || !activityIdValue) { fail("unknown customer/project/activity"); continue; }
+
+    const startTime = asTimestamp(row.startTime);
+    const endTime = asTimestamp(row.endTime);
+    if (!Number.isFinite(startTime) || !Number.isFinite(endTime)) { fail("startTime/endTime must be epoch ms"); continue; }
+    if (endTime <= startTime) { fail("endTime must be after startTime"); continue; }
+
+    const rate = asRate(row.hourlyRate);
+    const rateError = badRate(rate);
+    if (rateError) { fail(rateError); continue; }
+
+    const key = `${projectIdValue}|${activityIdValue}|${startTime}`;
+    if (existing.has(key)) { fail("already imported"); continue; }
+    existing.add(key);
+
+    const durationSeconds = Math.max(1, Math.round((endTime - startTime) / 1000));
+    const cost = (durationSeconds / 3600) * (rate || 0);
+    inserts.push(
+      env.DB.prepare(
+        "INSERT INTO time_entries (id, customer_id, project_id, activity_id, description, tags, start_time, end_time, duration_seconds, rate_applied, cost, is_running) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)"
+      ).bind(
+        crypto.randomUUID(), customerIdValue, projectIdValue, activityIdValue,
+        String(row.description ?? ""), String(row.tags ?? ""),
+        startTime, endTime, durationSeconds, rate, cost
+      )
+    );
+  }
+
+  if (!dryRun && inserts.length) await env.DB.batch(inserts);
+
+  return {
+    status: "ok",
+    dryRun,
+    created: dryRun ? { customers: 0, projects: 0, activities: 0 } : created,
+    imported: inserts.length,
+    skipped: skips,
+    received: entriesIn.length,
+  };
+}

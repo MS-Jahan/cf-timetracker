@@ -26,6 +26,7 @@ import {
   updateCustomer,
   updateProject,
   createTimeEntry,
+  importCsvBatch,
   updateTimeEntry,
   setArchived,
 } from "./core.js";
@@ -295,6 +296,18 @@ export default {
           return jsonResponse(request, env, { error: result.error }, STATUS_CODES[result.status] || 400);
         }
         return jsonResponse(request, env, { success: true, archived: action === "archive", record: result.record });
+      }
+
+      if (method === "POST" && pathname === "/api/import/csv") {
+        // Batched CSV import (Kimai export format). Masters + entries in one
+        // request; see docs/2026-09-20-csv-import-plan.md for the contract.
+        const body = await readJson(request);
+        if (!body) return jsonResponse(request, env, { error: "Invalid JSON body" }, 400);
+        const result = await importCsvBatch(env, body);
+        if (result.status !== "ok") {
+          return jsonResponse(request, env, { error: result.error }, STATUS_CODES[result.status] || 400);
+        }
+        return jsonResponse(request, env, result);
       }
 
       // 8. Historical entries — edit any closed entry, including its time range.

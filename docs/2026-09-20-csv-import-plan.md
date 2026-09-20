@@ -28,8 +28,8 @@ Ignored: `Duration`, `Price`, `Internal price`, `Fixed price`, `Name`, `User`, `
 
 ## What shipped today
 
-- **Worker:** `POST /api/entries` — creates a closed entry (import path only; the timer keeps using `/api/timer/start` so the single-running-timer rule is untouched). Validates FKs, project↔client, task linkage, time order; derives `duration_seconds` and `cost` server-side, never trusting input.
-- **`scripts/kimai-import.mjs`:** parses a Kimai export, plans master-data creation, then imports. DRY_RUN=1 prints the plan and writes nothing. Dedupe: a row whose (project, activity, start) already exists is skipped, so re-running the same file adds nothing. Used to import the real Kimai dump (290 entries, 1 client, 9 projects — verified: second run imported 0, skipped 290).
+- **Worker:** `POST /api/import/csv` — **one batched request carries masters + up to 1000 entries**, each entry referencing masters by NAME. The server match-or-creates the masters, dedupes rows on (project, activity, start), derives duration/cost server-side, validates every row, and inserts all clean rows in a single D1 batch (atomic). `dryRun: true` validates and reports without writing. Response: `{ imported, skipped: [{row, reason}], created, received }`. Timer starts keep using `/api/timer/start` so the single-running-timer rule is untouched.
+- **`scripts/kimai-import.mjs`:** parses a Kimai export and pushes it in **chunks** (default 200 rows/request, `CHUNK` env) — a 290-row file is 2 requests, not 290. DRY_RUN previews the first chunk. Proven against the real Kimai dump: first run 290/290 across 2 batches, second run 0 imported / 290 skipped (dedupe), all inside one atomic batch per request.
 
 ## In-app UI (planned, Settings → Import)
 

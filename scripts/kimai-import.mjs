@@ -7,19 +7,18 @@
  * converted to it first. Column order does not matter; header names must match
  * Kimai's export.
  *
- * What it does:
- *   - creates missing clients (currency from the CSV), projects (under their
- *     client), and shared activities — all matched by exact name, never duplicated
- *   - posts every row as a closed entry via POST /api/entries; duration and cost
- *     are derived server-side. The row's "Hourly price" becomes the entry rate.
- *   - skips rows whose (project, activity, start) already exists in the tracker,
- *     so re-running the same file adds nothing.
+ * Rows travel in CHUNKS: the CSV is parsed locally, masters are derived, and
+ * entries POST to /api/import/csv in batches (default 200 rows per request,
+ * worker cap 1000). The worker match-or-creates masters by name, dedupes rows
+ * on (project, activity, start), derives duration/cost server-side, and inserts
+ * each batch atomically — so re-running the same file adds nothing.
  *
  * Environment:
  *   TRACKER_URL    e.g. https://timetracker-api.safe-browsing.workers.dev
  *   TRACKER_TOKEN  optional, if the worker has APP_TOKEN set (X-App-Token)
  *   KIMAI_TZ       IANA zone the Kimai export's naive times are in
  *                  (default: Asia/Dhaka — Kimai exports local wall-clock times)
+ *   CHUNK          entries per request (default 200, max 1000)
  *   DRY_RUN        1 = report the plan without writing anything
  *
  * Usage:
@@ -31,10 +30,11 @@ const fs = await import("node:fs");
 const csvPath = process.argv[2];
 const env = process.env;
 if (!csvPath || !env.TRACKER_URL) {
-  console.error("Usage: TRACKER_URL=... [-- env DRY_RUN=1] node scripts/kimai-import.mjs kimai-export.csv\nKIMAI_TZ defaults to Asia/Dhaka. TRACKER_TOKEN optional.");
+  console.error("Usage: TRACKER_URL=... node scripts/kimai-import.mjs kimai-export.csv\nKIMAI_TZ defaults to Asia/Dhaka. CHUNK=200. DRY_RUN=1 previews. TRACKER_TOKEN optional.");
   process.exit(1);
 }
 const dry = env.DRY_RUN === "1";
+const chunkSize = Math.min(Math.max(Number(env.CHUNK) || 200, 1), 1000);
 const tz = env.KIMAI_TZ || "Asia/Dhaka";
 const base = env.TRACKER_URL.replace(/\/$/, "");
 const headers = env.TRACKER_TOKEN ? { "X-App-Token": env.TRACKER_TOKEN, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
@@ -108,13 +108,11 @@ for (let i = 1; i < rows.length; i++) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{1,2}:\d{2}/.test(from)) { skipped.push({ where, reason: `bad date/time (${date} ${from})` }); continue; }
   if (!customer || !project || !activity) { skipped.push({ where, reason: "missing customer/project/activity" }); continue; }
 
-  let startMs = naiveToEpochMs(date, from, tz);
-  let endTime = to || "";
+  const startMs = naiveToEpochMs(date, from, tz);
+  const endTime = to || "";
   let endMs = endTime ? naiveToEpochMs(date, endTime, tz) : NaN;
-  if (!endTime || endMs <= startMs) {
-    if (endTime) endMs += 86_400_000; // "To" past midnight rolls to the next day
-    else { skipped.push({ where, reason: "no end time (running rows are skipped)" }); continue; }
-  }
+  if (!endTime) { skipped.push({ where, reason: "no end time (running rows are skipped)" }); continue; }
+  if (endMs <= startMs) endMs += 86_400_000; // "To" past midnight rolls to the next day
   if (endMs <= startMs) { skipped.push({ where, reason: "end is not after start" }); continue; }
 
   const hourlyPrice = parseFloat(at(row, "Hourly price"));
@@ -131,33 +129,9 @@ for (let i = 1; i < rows.length; i++) {
 console.log(`CSV: ${records.length} importable rows, ${skipped.length} skipped.`);
 for (const s of skipped.slice(0, 10)) console.log(`  skip ${s.where}: ${s.reason}`);
 if (skipped.length > 10) console.log(`  … and ${skipped.length - 10} more skipped`);
+if (!records.length) process.exit(0);
 
-/* ---------- tracker master data ---------- */
-
-async function api(path, opts = {}) {
-  const res = await fetch(`${base}${path}`, { headers, ...opts });
-  const text = await res.text();
-  let json;
-  try { json = JSON.parse(text); } catch { throw new Error(`${path} → ${res.status}: ${text.slice(0, 200)}`); }
-  if (!res.ok && !opts.allowError) throw new Error(`${path} → ${res.status}: ${JSON.stringify(json).slice(0, 300)} — sent: ${String(opts.body ?? "").slice(0, 200)}`);
-  return json;
-}
-
-console.log(`\nReading tracker at ${base} …`);
-const bootstrap = await api("/api/bootstrap");
-const customers = [...bootstrap.customers, ...(bootstrap.archivedCustomers || [])];
-const projects = [...bootstrap.projects, ...(bootstrap.archivedProjects || [])];
-const activities = [...bootstrap.activities, ...(bootstrap.archivedActivities || [])];
-
-// Existing entries, for dedupe on re-runs.
-const existing = new Set();
-let offset = 0;
-for (;;) {
-  const page = await api(`/api/entries?limit=200&offset=${offset}`);
-  for (const e of page.entries) existing.add(`${e.project_id}|${e.activity_id}|${e.start_time}`);
-  offset += page.entries.length;
-  if (page.entries.length < 200) break;
-}
+/* ---------- derive masters + entries payload ---------- */
 
 const mode = (values) => {
   const counts = new Map();
@@ -165,81 +139,62 @@ const mode = (values) => {
   return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
 };
 
-const planCustomers = new Map(); // name -> { currency, hourlyRate }
+const customerInfo = new Map();
 for (const r of records) {
-  const entry = planCustomers.get(r.customer) || { currency: r.currency || "USD", rates: [] };
-  if (r.currency) entry.currency = r.currency;
-  entry.rates.push(r.hourlyRate);
-  planCustomers.set(r.customer, entry);
+  const info = customerInfo.get(r.customer) || { currency: r.currency || "USD", rates: [] };
+  if (r.currency) info.currency = r.currency;
+  info.rates.push(r.hourlyRate);
+  customerInfo.set(r.customer, info);
 }
-const planProjects = new Map(); // "customer\u0000project" -> customer name
-const planActivities = new Set();
-for (const r of records) {
-  planProjects.set(`${r.customer}\u0000${r.project}`, r.customer);
-  planActivities.add(r.activity);
-}
+const customers = [...customerInfo.entries()].map(([name, info]) => ({ name, currency: info.currency, hourlyRate: mode(info.rates) || 0 }));
+const projectNames = new Map();
+for (const r of records) projectNames.set(`${r.customer}\u0000${r.project}`, r.customer);
+const projects = [...projectNames.entries()].map(([key, customer]) => ({ customer, name: key.split("\u0000")[1] }));
+const activities = [...new Set(records.map((r) => r.activity))];
+const entries = records.map((r) => ({
+  customer: r.customer, project: r.project, activity: r.activity,
+  description: r.description, tags: r.tags,
+  startTime: r.startMs, endTime: r.endMs, hourlyRate: r.hourlyRate,
+}));
 
-const findOrCreate = async (list, name, createPath, body, label) => {
-  const hit = list.find((x) => x.name === name);
-  if (hit) { console.log(`  = ${label} "${name}" exists`); return hit.id; }
-  if (dry) { console.log(`  + ${label} "${name}" (dry run)`); return `dry-${label}-${name}`; }
-  const created = await api(createPath, { method: "POST", body: JSON.stringify(body) });
-  console.log(`  + ${label} "${name}"`);
-  // Tracker create endpoints answer { success: true, customer|project|activity: {...} }.
-  return created.customer?.id ?? created.project?.id ?? created.activity?.id ?? created.record?.id ?? created.id;
-};
+console.log(`\nPlan: ${customers.length} clients, ${projects.length} projects, ${activities.length} activities, ${entries.length} entries${dry ? " (DRY RUN — nothing written)" : ""}`);
 
-console.log(`\nPlan: ${planCustomers.size} clients, ${planProjects.size} projects, ${planActivities.size} activities, ${records.length} entries${dry ? " (DRY RUN — nothing written)" : ""}`);
+/* ---------- chunked batched import ---------- */
 
-const customerId = new Map(), projectId = new Map(), activityId = new Map();
-for (const [name, info] of planCustomers) {
-  const hourlyRate = mode(info.rates) || 0;
-  const id = await findOrCreate(customers, name, "/api/customers", { name, currency: info.currency, hourlyRate }, "client");
-  customerId.set(name, id);
-}
-for (const [key, customerName] of planProjects) {
-  const name = key.split("\u0000")[1];
-  const id = await findOrCreate(projects, name, "/api/projects", { customerId: customerId.get(customerName), name }, "project");
-  projectId.set(key, id);
-}
-for (const name of planActivities) {
-  const id = await findOrCreate(activities, name, "/api/activities", { name }, "activity");
-  activityId.set(name, id);
+async function api(path, body) {
+  const res = await fetch(`${base}${path}`, { method: "POST", headers, body: JSON.stringify(body) });
+  const text = await res.text();
+  let json;
+  try { json = JSON.parse(text); } catch { throw new Error(`${path} → ${res.status}: ${text.slice(0, 200)}`); }
+  if (!res.ok) throw new Error(`${path} → ${res.status}: ${JSON.stringify(json).slice(0, 300)}`);
+  return json;
 }
 
 if (dry) {
-  console.log(`\nSample entry: ${new Date(records[0].startMs).toISOString()} → ${new Date(records[0].endMs).toISOString()} "${records[0].description}" @ ${records[0].hourlyRate}/h`);
+  const result = await api("/api/import/csv", { dryRun: true, customers, projects, activities, entries: entries.slice(0, chunkSize) });
+  console.log(`Dry run on first chunk: would import ${result.imported}, would skip ${result.skipped.length} (of ${entries.length} total rows).`);
+  for (const s of result.skipped.slice(0, 5)) console.log(`  skip row ${s.row}: ${s.reason}`);
   process.exit(0);
 }
 
-/* ---------- push entries ---------- */
-
-let pushed = 0, dupes = 0, failed = 0;
-for (const r of records) {
-  const pId = projectId.get(`${r.customer}\u0000${r.project}`);
-  const aId = activityId.get(r.activity);
-  const key = `${pId}|${aId}|${r.startMs}`;
-  if (existing.has(key)) { dupes++; continue; }
+let imported = 0, dupes = 0, failed = 0;
+for (let i = 0; i < entries.length; i += chunkSize) {
+  const chunk = entries.slice(i, i + chunkSize);
   try {
-    await api("/api/entries", {
-      method: "POST",
-      body: JSON.stringify({
-        customerId: customerId.get(r.customer),
-        projectId: pId,
-        activityId: aId,
-        description: r.description,
-        tags: r.tags,
-        startTime: r.startMs,
-        endTime: r.endMs,
-        hourlyRate: r.hourlyRate,
-      }),
-    });
-    existing.add(key);
-    pushed++;
+    const result = await api("/api/import/csv", { dryRun: false, customers, projects, activities, entries: chunk });
+    imported += result.imported;
+    dupes += result.skipped.filter((s) => s.reason === "already imported").length;
+    for (const s of result.skipped) {
+      if (s.reason !== "already imported") {
+        failed++;
+        console.error(`  ! ${records[i + s.row]?.where ?? `chunk row ${s.row}`}: ${s.reason}`);
+      }
+    }
+    console.log(`  batch ${Math.floor(i / chunkSize) + 1}/${Math.ceil(entries.length / chunkSize)}: ${result.imported} imported, ${result.skipped.length} skipped`);
   } catch (err) {
-    failed++;
-    console.error(`  ! ${r.where}: ${err.message}`);
+    failed += chunk.length;
+    console.error(`  ! batch ${Math.floor(i / chunkSize) + 1} failed entirely: ${err.message}`);
   }
 }
 
-console.log(`\nDone: ${pushed} entries imported, ${dupes} already present (skipped), ${failed} failed.`);
+console.log(`\nDone: ${imported} entries imported, ${dupes} already present (skipped), ${failed} failed.`);
