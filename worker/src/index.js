@@ -440,16 +440,18 @@ export default {
         return jsonResponse(request, env, { success: true, activity: result.activity });
       }
 
-      // Demo reset — only when DEMO_MODE env var is truthy.
+      // Demo reset — only when DEMO_MODE env var is the exact string "true"
+      // (toml vars are strings, so Boolean("false") would be a false positive).
+      const demoEnabled = env.DEMO_MODE === "true";
       if (method === "POST" && pathname === "/api/demo/reset") {
-        if (!env.DEMO_MODE) return jsonResponse(request, env, { error: "Demo mode is not enabled" }, 403);
+        if (!demoEnabled) return jsonResponse(request, env, { error: "Demo mode is not enabled" }, 403);
         const result = await resetDemoData(env);
         return jsonResponse(request, env, { success: true });
       }
 
       // Demo status — lets the client know if demo mode is active.
       if (method === "GET" && pathname === "/api/demo/status") {
-        return jsonResponse(request, env, { demoMode: Boolean(env.DEMO_MODE) });
+        return jsonResponse(request, env, { demoMode: demoEnabled });
       }
 
       return jsonResponse(request, env, { error: "Route not found" }, 404);

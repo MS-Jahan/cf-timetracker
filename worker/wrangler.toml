@@ -1,17 +1,28 @@
-name = "cf-timetracker-api"
+# Top-level = personal instance (timetracker.sabit.dev).
+# Demo instance = `npx wrangler deploy --env demo` (cf-timetracker.pages.dev).
+# Secrets are per worker: GAS_SECRET (Sheets sync), GEMINI_API_KEY (voice),
+# APP_TOKEN (optional; native clients must send X-App-Token).
+name = "timetracker-api"
 main = "src/index.js"
 compatibility_date = "2026-09-01"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "cf-timetracker"
-database_id = "f0f53836-cfc8-458a-87e0-885f553cc774"
+database_name = "timetracker"
+database_id = "d3352438-a6ce-41b5-8844-e7851e630524"
 
 [vars]
-# Dev only. In prod set ALLOWED_ORIGINS to the Pages origin(s), comma-separated.
+ALLOWED_ORIGINS = "https://timetracker.sabit.dev,https://timetracker-8ss.pages.dev"
+DEMO_MODE = "false"
+
+[env.demo]
+name = "cf-timetracker-api"
+
+[env.demo.vars]
 ALLOWED_ORIGINS = "*"
-# GAS_SECRET comes via `wrangler secret put GAS_SECRET` (or .dev.vars locally).
-# Voice capture uses the secret `GEMINI_API_KEY`; optionally set GEMINI_MODEL here.
-# GEMINI_MODEL = "gemini-2.5-flash"
-# Set DEMO_MODE = "true" to enable the demo deployment experience.
 DEMO_MODE = "true"
+
+[[env.demo.d1_databases]]
+binding = "DB"
+database_name = "cf-timetracker"
+database_id = "f0f53836-cfc8-458a-87e0-885f553cc774"
