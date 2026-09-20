@@ -26,7 +26,7 @@ function ClientProjects({ projects, currency }) {
         {projects.length === 0 ? (
           <tr>
             <td colSpan={3} className="ink-muted py-6">
-              No projects yet — add one in <Link className="link" to="/settings">Settings</Link>.
+              No projects yet - add one in <Link className="link" to="/settings">Settings</Link>.
             </td>
           </tr>
         ) : (
@@ -120,16 +120,16 @@ export default function ClientDetailPage() {
         <dl className="flex items-end gap-8">
           <div>
             <dt className="field-label">Closed entries</dt>
-            <dd className="figure text-xl font-medium leading-none">{customer ? data.totals.entry_count : "—"}</dd>
+            <dd className="figure text-xl font-medium leading-none">{customer ? data.totals.entry_count : "-"}</dd>
           </div>
           <div>
             <dt className="field-label">Hours</dt>
-            <dd className="figure text-xl font-medium leading-none">{customer ? formatDuration(data.totals.total_seconds) : "—"}</dd>
+            <dd className="figure text-xl font-medium leading-none">{customer ? formatDuration(data.totals.total_seconds) : "-"}</dd>
           </div>
           <div>
             <dt className="field-label">Billed</dt>
             <dd className="figure text-accent text-xl font-medium leading-none">
-              {customer ? formatMoney(data.totals.total_cost, currency) : "—"}
+              {customer ? formatMoney(data.totals.total_cost, currency) : "-"}
             </dd>
           </div>
         </dl>

@@ -7,7 +7,7 @@ import { Link } from "../lib/router.jsx";
 
 /**
  * Dedicated print view (/print?month=YYYY-MM&client=<id>&project=<id>):
- * renders ONLY the timesheet — no app chrome, no filters — so the browser's
+ * renders ONLY the timesheet - no app chrome, no filters - so the browser's
  * print dialog never sees interactive UI. Opens the print dialog once on
  * load; the toolbar stays on screen (no-print) for retries.
  */

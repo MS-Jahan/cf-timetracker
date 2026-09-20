@@ -16,7 +16,7 @@ const attempts = Number(process.argv[3] || 20);
 
 let failed = false;
 const check = (ok, label, detail = "") => {
-  console.log(`${ok ? "PASS" : "FAIL"}  ${label}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "PASS" : "FAIL"}  ${label}${detail ? ` - ${detail}` : ""}`);
   if (!ok) failed = true;
 };
 
@@ -44,7 +44,7 @@ for (const key of ["customers", "projects", "activities"]) {
   }
 }
 if (bootstrap.body.activeTimer) {
-  console.error("A timer is already running — stop it before running this check.");
+  console.error("A timer is already running - stop it before running this check.");
   process.exit(2);
 }
 

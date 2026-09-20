@@ -190,8 +190,8 @@ export async function querySummary(env, { fromMs, toMs, month } = {}) {
   `).bind(...bind).all();
 
   const rows = (results || []).map((r) => ({
-    customer: r.customer ?? "—",
-    project: r.project ?? "—",
+    customer: r.customer ?? "-",
+    project: r.project ?? "-",
     ...(r.currency ? { currency: r.currency } : {}),
     total_seconds: Math.round(r.total_seconds || 0),
     total_hours: Number(((r.total_seconds || 0) / 3600).toFixed(2)),
@@ -343,7 +343,7 @@ function badRate(rate) {
   return !Number.isFinite(rate) || rate < 0 ? "rate must be a number >= 0" : null;
 }
 
-/** customers: name (required), currency (3 letters), hourly_rate — the client's default rate. */
+/** customers: name (required), currency (3 letters), hourly_rate - the client's default rate. */
 export async function createCustomer(env, { name, currency, hourlyRate, imageUrl } = {}) {
   if (isBlank(name)) return { status: "invalid", error: "name is required" };
   const code = isBlank(currency) ? "USD" : String(currency).trim().toUpperCase();
@@ -399,7 +399,7 @@ export async function updateCustomer(env, id, patch = {}) {
   return { status: "ok", customer: await env.DB.prepare("SELECT * FROM customers WHERE id = ?").bind(id).first() };
 }
 
-/** projects: customer_id FK, name, budget_type (hourly|fixed), rate — overrides the customer rate.
+/** projects: customer_id FK, name, budget_type (hourly|fixed), rate - overrides the customer rate.
  *  `defaultTasks` names are linked per project (created globally on demand); the
  *  default when omitted is ["General", "Meeting"], and `[]` opts out entirely. */
 export async function createProject(env, { customerId, name, budgetType, rate, currency, imageUrl, defaultTasks } = {}) {
@@ -940,7 +940,7 @@ export async function resetDemoData(env) {
   ];
 
   // Ensure customers, projects, activities exist (upsert-style: ignore on conflict),
-  // then resolve the ids actually stored — a name may already exist under a different
+  // then resolve the ids actually stored - a name may already exist under a different
   // id (activities.name is UNIQUE; default "General"/"Meeting" rows pre-date the demo
   // seed), so entries must reference the resolved ids, not the literal demo ones.
   const cid = {};
@@ -1036,7 +1036,7 @@ export async function parseVoiceTask(env, { audioBase64, mimeType = "audio/webm"
 }
 
 /**
- * Create a closed entry directly — imports only (CSV/Kimai), never the timer path.
+ * Create a closed entry directly - imports only (CSV/Kimai), never the timer path.
  * Times are epoch milliseconds; duration and cost are derived, never trusted from input.
  */
 export async function createTimeEntry(env, body = {}) {
@@ -1164,13 +1164,13 @@ export async function updateTimeEntry(env, id, patch = {}) {
 const IMPORT_MAX_ENTRIES = 1000;
 
 /**
- * Batched CSV import (Kimai export format is canonical — see
+ * Batched CSV import (Kimai export format is canonical - see
  * docs/2026-09-20-csv-import-plan.md). One request carries the masters plus up
  * to IMPORT_MAX_ENTRIES rows, each entry referencing masters by NAME. The
  * server match-or-creates the masters, dedupes rows against existing entries
  * on (projectId, activityId, startTime), derives duration/cost server-side,
  * and inserts every valid row in one D1 batch (atomic). Nothing is updated or
- * deleted — import only adds.
+ * deleted - import only adds.
  *
  * payload: { dryRun, customers: [{name, currency?, hourlyRate?}],
  *            projects: [{customer, name}], activities: [name],
@@ -1189,7 +1189,7 @@ export async function importCsvBatch(env, payload = {}) {
     return { status: "invalid", error: `entries[] is limited to ${IMPORT_MAX_ENTRIES} rows per request` };
   }
 
-  // Masters — match by exact trimmed name, create when missing.
+  // Masters - match by exact trimmed name, create when missing.
   const customerId = new Map();
   const created = { customers: 0, projects: 0, activities: 0 };
   const skips = [];
@@ -1247,7 +1247,7 @@ export async function importCsvBatch(env, payload = {}) {
     const fail = (reason) => skips.push({ row: i, reason });
     const rowCustomer = String(row?.customer ?? "").trim();
     const rowProject = String(row?.project ?? "").trim();
-    // Dry run never creates masters, so the id maps are empty — validate the
+    // Dry run never creates masters, so the id maps are empty - validate the
     // name references without resolving them.
     const customerIdValue = dryRun ? rowCustomer : customerId.get(rowCustomer);
     const projectIdValue = dryRun ? `${rowCustomer}\u0000${rowProject}` : projectId.get(`${rowCustomer}\u0000${rowProject}`);

@@ -1,4 +1,4 @@
-// cf-timetracker Worker — REST API (spec §2, tasks T-W1..T-W4) + MCP (POST /mcp, T-M1..T-M4).
+// cf-timetracker Worker - REST API (spec §2, tasks T-W1..T-W4) + MCP (POST /mcp, T-M1..T-M4).
 // CORS is env-driven via ALLOWED_ORIGINS (comma-separated). "*" allowed only in dev.
 // Timer operations live in ./core.js so REST and MCP share one implementation.
 
@@ -152,7 +152,7 @@ export default {
         });
       }
 
-      // 2. Start timer — 409 when a timer is already running (whether the pre-check or
+      // 2. Start timer - 409 when a timer is already running (whether the pre-check or
       // the unique-index violation caught it), 400 for validation problems.
       if (method === "POST" && pathname === "/api/timer/start") {
         const body = await readJson(request);
@@ -243,7 +243,7 @@ export default {
         return jsonResponse(request, env, { success: true, gasResult });
       }
 
-      // 4b. Voice task capture — parses audio into a reviewable draft only.
+      // 4b. Voice task capture - parses audio into a reviewable draft only.
       if (method === "POST" && pathname === "/api/voice/parse") {
         const body = await readJson(request);
         if (!body) return jsonResponse(request, env, { error: "Invalid JSON body" }, 400);
@@ -310,7 +310,7 @@ export default {
         return jsonResponse(request, env, result);
       }
 
-      // 8. Historical entries — edit any closed entry, including its time range.
+      // 8. Historical entries - edit any closed entry, including its time range.
       const entryMatch = matchCollection(pathname, "entries");
       if (method === "POST" && pathname === "/api/entries") {
         // Closed-entry create: the import path (CSV/Kimai). Timer starts must go
@@ -333,7 +333,7 @@ export default {
         return jsonResponse(request, env, { success: true, entry: result.entry });
       }
 
-      // 9. Client detail — profile, projects, and paginated time history.
+      // 9. Client detail - profile, projects, and paginated time history.
       const clientDetailMatch = pathname.match("^/api/clients/([^/]+)$");
       if (method === "GET" && clientDetailMatch) {
         const id = decodeURIComponent(clientDetailMatch[1]);
@@ -346,7 +346,7 @@ export default {
         return jsonResponse(request, env, result);
       }
 
-      // 9b. Project detail — profile with client context, activity breakdown, paginated history.
+      // 9b. Project detail - profile with client context, activity breakdown, paginated history.
       const projectDetailMatch = pathname.match("^/api/projects/([^/]+)$");
       if (method === "GET" && projectDetailMatch) {
         const id = decodeURIComponent(projectDetailMatch[1]);
@@ -359,7 +359,7 @@ export default {
         return jsonResponse(request, env, result);
       }
 
-      // 8b. Entries by period — paginated history for app period filters
+      // 8b. Entries by period - paginated history for app period filters
       // (last week / last month / custom range).
       if (method === "GET" && pathname === "/api/entries") {
         const fromMs = url.searchParams.get("fromMs");
@@ -376,7 +376,7 @@ export default {
         return jsonResponse(request, env, result);
       }
 
-      // 8c. Project tasks — the task list of one project (with default flags).
+      // 8c. Project tasks - the task list of one project (with default flags).
       const projectTasksMatch = pathname.match("^/api/projects/([^/]+)/tasks$");
       if (method === "GET" && projectTasksMatch) {
         const tasks = await listProjectTasks(env, decodeURIComponent(projectTasksMatch[1]));
@@ -400,7 +400,7 @@ export default {
         return jsonResponse(request, env, { success: true });
       }
 
-      // 9c. Activity detail — profile, client breakdown (per-client currency), paginated history.
+      // 9c. Activity detail - profile, client breakdown (per-client currency), paginated history.
       const activityDetailMatch = pathname.match("^/api/activities/([^/]+)$");
       if (method === "GET" && activityDetailMatch) {
         const id = decodeURIComponent(activityDetailMatch[1]);
@@ -413,7 +413,7 @@ export default {
         return jsonResponse(request, env, result);
       }
 
-      // 10. Master data — create / update customers, projects, activities
+      // 10. Master data - create / update customers, projects, activities
       if (method === "POST" && pathname === "/api/customers") {
         const body = await readJson(request);
         if (!body) return jsonResponse(request, env, { error: "Invalid JSON body" }, 400);
@@ -465,7 +465,7 @@ export default {
         return jsonResponse(request, env, { success: true, activity: result.activity });
       }
 
-      // Demo reset — only when DEMO_MODE env var is the exact string "true"
+      // Demo reset - only when DEMO_MODE env var is the exact string "true"
       // (toml vars are strings, so Boolean("false") would be a false positive).
       const demoEnabled = env.DEMO_MODE === "true";
       if (method === "POST" && pathname === "/api/demo/reset") {
@@ -474,7 +474,7 @@ export default {
         return jsonResponse(request, env, { success: true });
       }
 
-      // Demo status — lets the client know if demo mode is active.
+      // Demo status - lets the client know if demo mode is active.
       if (method === "GET" && pathname === "/api/demo/status") {
         return jsonResponse(request, env, { demoMode: demoEnabled });
       }

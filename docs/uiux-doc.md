@@ -1,7 +1,7 @@
 Now, you need to practically implement what you learned in today's UI/UX session into your existing project. 🚀
 📝 Your Task
 Select at least 3 key pages/sections of your existing project and perform a UI/UX audit and improvements.
-Make sure to review and—where necessary—implement the following:
+Make sure to review and-where necessary-implement the following:
 1️⃣ User Experience
 Make the user flow simple and logical
 Remove confusing CTAs or unnecessary steps

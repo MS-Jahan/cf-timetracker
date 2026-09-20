@@ -146,7 +146,7 @@ export default function EmojiPicker({ value, onChange, label = "Emoji" }) {
         ref={buttonRef}
         type="button"
         className="btn btn-sm min-w-11 px-2 ring-1 ring-inset ring-base-300"
-        aria-label={value ? `Emoji: ${value} — change` : `${label} — choose`}
+        aria-label={value ? `Emoji: ${value} - change` : `${label} - choose`}
         aria-expanded={open}
         title="Choose an emoji"
         onClick={() => {

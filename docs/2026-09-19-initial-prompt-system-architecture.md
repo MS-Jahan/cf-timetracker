@@ -1,12 +1,12 @@
-# System Architecture & Technical Specification — Initial Prompt
+# System Architecture & Technical Specification - Initial Prompt
 
 > **Source:** Initial architecture prompt supplied by project owner.
 > **Saved:** 2026-09-19
-> **Status:** Foundational reference — implementation agents may extend schemas, adapt data models (e.g. multi-tenancy, team roles, custom tax), and scale interfaces to domain requirements.
+> **Status:** Foundational reference - implementation agents may extend schemas, adapt data models (e.g. multi-tenancy, team roles, custom tax), and scale interfaces to domain requirements.
 > **Related docs:**
-> - `2026-09-19-brainstorm-notes.md` — open questions, approaches, decisions
-> - `2026-09-19-phased-plan.md` — phased delivery plan
-> - `2026-09-19-task-list.md` — detailed checkable task list
+> - `2026-09-19-brainstorm-notes.md` - open questions, approaches, decisions
+> - `2026-09-19-phased-plan.md` - phased delivery plan
+> - `2026-09-19-task-list.md` - detailed checkable task list
 
 ---
 
@@ -453,8 +453,8 @@ Protect the entire deployment using **Cloudflare Zero Trust Access** (free up to
 
 These gaps were noticed while filing this spec and are tracked in the phased plan / task list:
 
-- `filterMonth` is accepted by `/api/sync/google-sheets` but never applied — needs a `WHERE` clause or documented removal.
+- `filterMonth` is accepted by `/api/sync/google-sheets` but never applied - needs a `WHERE` clause or documented removal.
 - Worker has no input validation (missing IDs, FK existence), no auth check, and `Access-Control-Allow-Origin: *` conflicts with Zero Trust intent.
 - MCP handler is a snippet only: `stop_timer`, `start_timer`, `query_summary`, error paths, and SSE/Streamable transport are undefined.
-- Frontend, `wrangler.toml`, seed data, and CRUD for customers/projects/activities are unspecified and must be designed in Phase 1–4.
+- Frontend, `wrangler.toml`, seed data, and CRUD for customers/projects/activities are unspecified and must be designed in Phase 1-4.
 - GAS receiver has no dedupe (re-sync appends duplicates), no auth/secret, and no month filtering.

@@ -1,15 +1,15 @@
-# Production deploy runbook (T-W4, T-Z1–T-Z3)
+# Production deploy runbook (T-W4, T-Z1-T-Z3)
 
 **Date:** 2026-09-20
-**Purpose:** every remaining production step, in order, executable by the account owner. Nothing here can be done from this repo alone — each step needs the Cloudflare dashboard or a logged-in `wrangler`.
+**Purpose:** every remaining production step, in order, executable by the account owner. Nothing here can be done from this repo alone - each step needs the Cloudflare dashboard or a logged-in `wrangler`.
 
 ## 0. Prerequisites
 
 - A Cloudflare account with Workers, Pages, and D1 access.
-- `npx wrangler login` (once) — then `wrangler whoami` shows the account.
+- `npx wrangler login` (once) - then `wrangler whoami` shows the account.
 - Decide the domains: e.g. Worker `tt-api.yourdomain.com`, Pages `timesheet.yourdomain.com` (a `workers.dev`/`pages.dev` subdomain works without a custom domain).
 
-## 1. D1 — create production database and apply schema (T-Z2)
+## 1. D1 - create production database and apply schema (T-Z2)
 
 ```bash
 cd worker
@@ -22,14 +22,14 @@ npx wrangler d1 execute cf-timetracker --remote --file=../db/migrations/2026-09-
 # npx wrangler d1 execute cf-timetracker --remote --file=../db/seed.sql
 ```
 
-## 2. Worker — secrets and prod CORS (T-W4, T-Z2)
+## 2. Worker - secrets and prod CORS (T-W4, T-Z2)
 
 ```bash
 # Generate once; this value also goes into the GAS Script Property (step 4).
 openssl rand -hex 32
 npx wrangler secret put GAS_SECRET          # paste the value
 
-# worker/wrangler.toml [vars] — replace "*" with the exact Pages origin(s):
+# worker/wrangler.toml [vars] - replace "*" with the exact Pages origin(s):
 # ALLOWED_ORIGINS = "https://timesheet.yourdomain.com[,https://www.yourdomain.com]"
 ```
 
@@ -50,7 +50,7 @@ cd ../web && npm run build && npx wrangler pages deploy dist --project-name cf-t
 
 Custom domains: Pages dashboard → the project → Custom domains; Worker dashboard → Triggers → add route `tt-api.yourdomain.com/*`.
 
-## 4. GAS receiver deployment (completes T-G1–G3)
+## 4. GAS receiver deployment (completes T-G1-G3)
 
 1. New Google Sheet → Extensions → Apps Script → paste `gas/Code.gs`.
 2. Project Settings → Script Properties → `SHARED_SECRET` = the same value as the Worker's `GAS_SECRET`.
@@ -82,4 +82,4 @@ Custom domains: Pages dashboard → the project → Custom domains; Worker dashb
 
 - Worker: `npx wrangler rollback` (or redeploy the previous image from CI history).
 - Pages: deployments list → instant rollback to the previous build.
-- D1: schema changes are additive (`ALTER`/`CREATE INDEX IF NOT EXISTS`); time-travel restore in the dashboard covers data mistakes (7–30 days).
+- D1: schema changes are additive (`ALTER`/`CREATE INDEX IF NOT EXISTS`); time-travel restore in the dashboard covers data mistakes (7-30 days).

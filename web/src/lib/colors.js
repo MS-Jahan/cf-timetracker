@@ -1,6 +1,6 @@
 // Stable per-entity accents, expressed in daisyUI theme tokens so they follow the
 // active theme instead of hard-coding a palette.
-// Literal class strings only — Tailwind scans this file for candidates.
+// Literal class strings only - Tailwind scans this file for candidates.
 const PALETTE = [
   { status: "status-primary", text: "text-primary", badge: "badge badge-soft badge-primary", bar: "bg-primary" },
   { status: "status-secondary", text: "text-secondary", badge: "badge badge-soft badge-secondary", bar: "bg-secondary" },

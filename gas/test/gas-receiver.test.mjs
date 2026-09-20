@@ -1,4 +1,4 @@
-// Local harness for gas/Code.gs (T-G1..T-G3) — runs without a Google account.
+// Local harness for gas/Code.gs (T-G1..T-G3) - runs without a Google account.
 // Run: node --test gas/test/   (wired into `npm run verify`)
 //
 // Code.gs is plain script code for the Apps Script runtime. Loading it here means

@@ -45,7 +45,7 @@
 
 ### Animation system
 
-Pure CSS/Tailwind — no new dependencies. All animations respect `prefers-reduced-motion`.
+Pure CSS/Tailwind - no new dependencies. All animations respect `prefers-reduced-motion`.
 
 ### Where animations apply
 
@@ -99,11 +99,11 @@ Implemented 2026-09-20. All items from §3 executed in order.
 
 ### Worker
 
-- Added `resetDemoData(env)` to `worker/src/core.js` — clears `time_entries`, upserts 2 clients, 3 projects, 4 activities, and 5 closed entries using `INSERT OR IGNORE` so the script is idempotent.
-- Added `POST /api/demo/reset` route in `worker/src/index.js` — guarded by `env.DEMO_MODE`; returns 403 when demo mode is off.
-- Added `GET /api/demo/status` — returns `{ demoMode: boolean }` so the client can detect demo mode without a page-level env var.
-- Added `DEMO_MODE = "false"` to `worker/wrangler.toml` `[vars]` — set to `"true"` for demo deployments.
-- Created `scripts/seed-demo.mjs` — standalone script that re-seeds the standard demo dataset via `wrangler d1 execute`.
+- Added `resetDemoData(env)` to `worker/src/core.js` - clears `time_entries`, upserts 2 clients, 3 projects, 4 activities, and 5 closed entries using `INSERT OR IGNORE` so the script is idempotent.
+- Added `POST /api/demo/reset` route in `worker/src/index.js` - guarded by `env.DEMO_MODE`; returns 403 when demo mode is off.
+- Added `GET /api/demo/status` - returns `{ demoMode: boolean }` so the client can detect demo mode without a page-level env var.
+- Added `DEMO_MODE = "false"` to `worker/wrangler.toml` `[vars]` - set to `"true"` for demo deployments.
+- Created `scripts/seed-demo.mjs` - standalone script that re-seeds the standard demo dataset via `wrangler d1 execute`.
 
 ### Web
 
@@ -111,14 +111,14 @@ Implemented 2026-09-20. All items from §3 executed in order.
 
 Added pure-CSS utility classes in `web/src/index.css`:
 
-- `animate-fade-in` — 200ms opacity fade.
-- `animate-slide-down` — 200ms slide down + fade.
-- `animate-slide-up` — 200ms slide up + fade.
-- `animate-scale-in` — 400ms scale from 0.85 → 1.0 + fade.
-- `animate-progress` — 1200ms width fill for the splash progress bar.
-- `animate-pulse-dot` — 2s infinite opacity pulse for the running-timer indicator.
-- `animate-fade-out` — 400ms fade out for splash dismissal.
-- `page-enter` — 250ms slide-up for page content transitions.
+- `animate-fade-in` - 200ms opacity fade.
+- `animate-slide-down` - 200ms slide down + fade.
+- `animate-slide-up` - 200ms slide up + fade.
+- `animate-scale-in` - 400ms scale from 0.85 → 1.0 + fade.
+- `animate-progress` - 1200ms width fill for the splash progress bar.
+- `animate-pulse-dot` - 2s infinite opacity pulse for the running-timer indicator.
+- `animate-fade-out` - 400ms fade out for splash dismissal.
+- `page-enter` - 250ms slide-up for page content transitions.
 
 All gated behind `@media (prefers-reduced-motion: no-preference)` so they vanish for users who prefer reduced motion. Duration and `animation-iteration-count` are clamped in the `reduce` block.
 
@@ -127,7 +127,7 @@ All gated behind `@media (prefers-reduced-motion: no-preference)` so they vanish
 Created `web/src/components/SplashScreen.jsx`:
 
 - SVG clock logo (circle, hour marks, hour hand, minute hand) scales in over 400ms.
-- "Timetracker — Billable hours, clearly kept." text fades in.
+- "Timetracker - Billable hours, clearly kept." text fades in.
 - Progress bar fills with the accent color over 1200ms.
 - Whole screen fades out over 400ms.
 - Total visible time ≈ 2s.

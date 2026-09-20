@@ -1,4 +1,4 @@
-# GitHub Actions Workflow — Flutter Builds
+# GitHub Actions Workflow - Flutter Builds
 
 **Date:** 2026-09-20  
 **Status:** ✅ Complete

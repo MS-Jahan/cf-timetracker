@@ -75,16 +75,16 @@ export default function ActivityDetailPage() {
         <dl className="flex items-end gap-8">
           <div>
             <dt className="field-label">Closed entries</dt>
-            <dd className="figure text-xl font-medium leading-none">{activity ? data.totals.entry_count : "—"}</dd>
+            <dd className="figure text-xl font-medium leading-none">{activity ? data.totals.entry_count : "-"}</dd>
           </div>
           <div>
             <dt className="field-label">Hours</dt>
-            <dd className="figure text-xl font-medium leading-none">{activity ? formatDuration(data.totals.total_seconds) : "—"}</dd>
+            <dd className="figure text-xl font-medium leading-none">{activity ? formatDuration(data.totals.total_seconds) : "-"}</dd>
           </div>
           <div>
             <dt className="field-label">Billed{mixedCurrency ? <span className="ml-1 text-xs ink-muted font-normal">mixed currencies</span> : null}</dt>
             <dd className="figure text-accent text-xl font-medium leading-none">
-              {activity && currency ? formatMoney(data.totals.total_cost, currency) : activity ? "—" : "—"}
+              {activity && currency ? formatMoney(data.totals.total_cost, currency) : activity ? "-" : "-"}
             </dd>
           </div>
         </dl>

@@ -23,7 +23,7 @@ There will be no separate mobile and desktop Dart apps. Platform folders contain
 
 ## 2. Feature matrix
 
-### Phase A — implemented in this pass
+### Phase A - implemented in this pass
 
 | Capability | Mobile | Desktop | API/source |
 |---|---:|---:|---|
@@ -38,7 +38,7 @@ There will be no separate mobile and desktop Dart apps. Platform folders contain
 | Loading, empty, API error, retry, and action feedback | ✓ | ✓ | shared widgets |
 | Settings workspace summary and API connection check | ✓ | ✓ | bootstrap |
 
-### Phase B — next native parity slice
+### Phase B - next native parity slice
 
 - Edit closed entries using `PATCH /api/entries/:id`.
 - Client/project/activity management, archive/restore, rates, currencies, emoji, and image paste/upload.
@@ -46,7 +46,7 @@ There will be no separate mobile and desktop Dart apps. Platform folders contain
 - CSV export and native share/save flow.
 - Voice-to-draft capture using a platform-compatible recorder package; Gemini remains server-side.
 
-### Phase C — platform capabilities
+### Phase C - platform capabilities
 
 - Local notifications for unusually long timers.
 - Secure token storage when authentication is introduced.

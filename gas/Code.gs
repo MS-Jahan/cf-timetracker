@@ -64,7 +64,7 @@ function doPost(e) {
     return jsonResponse_({ status: "error", message: "Invalid JSON body" });
   }
 
-  // T-G3: shared secret — fail closed on unset property or mismatch.
+  // T-G3: shared secret - fail closed on unset property or mismatch.
   if (!secret || providedSecret_(e, payload) !== secret) {
     return jsonResponse_({ status: "error", message: "Unauthorized" });
   }
@@ -83,7 +83,7 @@ function doPost(e) {
     if (!sheet) sheet = ss.insertSheet(SHEET_NAME);
     if (sheet.getLastRow() === 0) sheet.appendRow(HEADER);
 
-    // T-G2: dedupe on Entry ID (column A) — pre-read existing ids into a set.
+    // T-G2: dedupe on Entry ID (column A) - pre-read existing ids into a set.
     var existing = {};
     var last = sheet.getLastRow();
     if (last > 1) {

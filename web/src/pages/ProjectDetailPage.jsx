@@ -47,7 +47,7 @@ export default function ProjectDetailPage() {
       ? `${formatMoney(project.rate, currency)}/h`
       : project
         ? `No project rate set, so every entry inherits the client rate: ${formatMoney(project.customer_rate || 0, currency)}/h (${project.customer_name || "client"}).`
-        : "—";
+        : "-";
 
   return (
     <div>
@@ -71,16 +71,16 @@ export default function ProjectDetailPage() {
         <dl className="flex items-end gap-8">
           <div>
             <dt className="field-label">Closed entries</dt>
-            <dd className="figure text-xl font-medium leading-none">{project ? data.totals.entry_count : "—"}</dd>
+            <dd className="figure text-xl font-medium leading-none">{project ? data.totals.entry_count : "-"}</dd>
           </div>
           <div>
             <dt className="field-label">Hours</dt>
-            <dd className="figure text-xl font-medium leading-none">{project ? formatDuration(data.totals.total_seconds) : "—"}</dd>
+            <dd className="figure text-xl font-medium leading-none">{project ? formatDuration(data.totals.total_seconds) : "-"}</dd>
           </div>
           <div>
             <dt className="field-label">Billed</dt>
             <dd className="figure text-accent text-xl font-medium leading-none">
-              {project ? formatMoney(data.totals.total_cost, currency) : "—"}
+              {project ? formatMoney(data.totals.total_cost, currency) : "-"}
             </dd>
           </div>
         </dl>

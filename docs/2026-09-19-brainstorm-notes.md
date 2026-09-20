@@ -1,4 +1,4 @@
-# Brainstorm Notes — cf-timetracker
+# Brainstorm Notes - cf-timetracker
 
 **Date:** 2026-09-19
 **Status:** Design deliberation backing the phased plan
@@ -15,8 +15,8 @@
 
 - D1 is SQLite at edge: no long-lived connections, keep queries simple, index `customer/project/start/is_running`.
 - Zero Trust sits in front of Pages; Worker must not trust `Allow-Origin: *` in prod.
-- GAS Web App deployed "Anyone" is inherently open — needs shared-secret or token check plus `Entry ID` dedupe.
-- Browser-print only for PDF — no server renderer, no binary deps in Worker.
+- GAS Web App deployed "Anyone" is inherently open - needs shared-secret or token check plus `Entry ID` dedupe.
+- Browser-print only for PDF - no server renderer, no binary deps in Worker.
 - Single active timer is a hard invariant; enforce in SQL/logic, not just UI.
 
 ## 3. Approaches considered
@@ -37,7 +37,7 @@
 - **Gap to close:** implement `filterMonth`, cap payload size, handle GAS errors/retries.
 
 ### D. MCP transport: JSON-RPC POST (now) vs. SSE / Streamable HTTP (later)
-- **Now:** `POST /mcp` JSON-RPC 2.0 (`tools/list`, `tools/call`) — matches spec snippet, testable with `curl`.
+- **Now:** `POST /mcp` JSON-RPC 2.0 (`tools/list`, `tools/call`) - matches spec snippet, testable with `curl`.
 - **Later:** adopt MCP Streamable HTTP / SSE if Claude Desktop / Cursor requires it; keep tool schemas stable.
 - **Gap to close:** implement missing `stop_timer`, `start_timer`, `query_summary` handlers + validation + error envelopes.
 
@@ -49,7 +49,7 @@
 ## 4. Key decisions
 
 1. Time in **epoch ms** (`start_time`/`end_time`); billing in integer `duration_seconds`; `cost = duration/3600 * rate_applied`.
-2. CRUD for customers/projects/activities is required (spec has reads only) — minimal POST endpoints or D1-seeded + SQL-admin to start; full UI forms in Phase 4.
+2. CRUD for customers/projects/activities is required (spec has reads only) - minimal POST endpoints or D1-seeded + SQL-admin to start; full UI forms in Phase 4.
 3. Tags stay opaque strings in Worker; parsing/formatting is a frontend concern.
 4. No auth logic in Worker v1 beyond reading `Cf-Access-Jwt-Assertion` / `Cf-Access-Authenticated-User-Email` headers; real enforcement is the Access Application. Tighten CORS origins via env.
 5. GAS sheet `TimeEntries` dedupes on `Entry ID`; rejects requests without shared secret.
@@ -57,7 +57,7 @@
 ## 5. Open questions (for owner, non-blocking)
 
 1. Multi-user now or later? (Spec implies single user; schema has no `user_id`.)
-2. Currency: single per customer (spec) — need conversion/reporting currency?
+2. Currency: single per customer (spec) - need conversion/reporting currency?
 3. `filterMonth` format: `YYYY-MM`? Timezone for month boundary (UTC vs local)?
 4. MCP clients: which must work day one (Cursor, Claude Desktop, custom)? Dictates transport priority.
 5. Domains: Pages + Worker custom domains + Access app hostname?

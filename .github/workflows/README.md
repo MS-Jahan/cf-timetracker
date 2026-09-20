@@ -1,4 +1,4 @@
-# GitHub Actions Workflow — Flutter Builds
+# GitHub Actions Workflow - Flutter Builds
 
 ## Overview
 

@@ -20,7 +20,7 @@ async function request(path, options = {}) {
   }
 
   if (!res.ok) {
-    const detail = data.excerpt ? ` — ${data.excerpt}` : "";
+    const detail = data.excerpt ? ` - ${data.excerpt}` : "";
     const error = new Error((data.error || `Request failed (${res.status})`) + detail);
     error.status = res.status;
     // Machine-readable reason from the worker, e.g. "timer_running" / "no_active_timer".

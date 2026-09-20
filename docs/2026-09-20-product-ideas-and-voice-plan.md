@@ -11,38 +11,38 @@ The product is strongest when it makes the first useful action obvious: decide w
 
 ### Identity and recognition
 
-1. **Client identity** — optional low-resolution avatar/logo stored as a client-side resized base64 data URL in D1. Show it in Settings, client detail, dashboard client rows, and the timer context.
-2. **Project identity** — optional low-resolution image stored as a client-side resized base64 data URL in D1; show it beside project names in Settings, detail pages, dashboard rankings, and the timer form.
-3. **Activity/task identity** — emoji now for instant scanning; optional low-resolution base64 image for a richer task/category identity. Use it in activity lists, ledger links, dashboard breakdowns, and voice-created drafts.
-4. **Color accents** — a small curated accent choice per client/project, constrained to the design token palette rather than arbitrary hex values.
+1. **Client identity** - optional low-resolution avatar/logo stored as a client-side resized base64 data URL in D1. Show it in Settings, client detail, dashboard client rows, and the timer context.
+2. **Project identity** - optional low-resolution image stored as a client-side resized base64 data URL in D1; show it beside project names in Settings, detail pages, dashboard rankings, and the timer form.
+3. **Activity/task identity** - emoji now for instant scanning; optional low-resolution base64 image for a richer task/category identity. Use it in activity lists, ledger links, dashboard breakdowns, and voice-created drafts.
+4. **Color accents** - a small curated accent choice per client/project, constrained to the design token palette rather than arbitrary hex values.
 
 ### Faster capture
 
-5. **Voice task capture (this pass)** — record a short audio note, send it to Gemini through the Worker, receive strict JSON, map recognized client/project/activity names to existing records, and fill a draft. Never auto-start billable time.
-6. **Quick-add command palette** — keyboard shortcut to start a timer, open a client, or create a manual entry.
-7. **Natural-language manual entry** — type “45 minutes on Acme website review yesterday” and turn it into a reviewable draft.
-8. **Recent-task shortcuts** — one-click “start again” for the most recent client/project/activity combinations.
+5. **Voice task capture (this pass)** - record a short audio note, send it to Gemini through the Worker, receive strict JSON, map recognized client/project/activity names to existing records, and fill a draft. Never auto-start billable time.
+6. **Quick-add command palette** - keyboard shortcut to start a timer, open a client, or create a manual entry.
+7. **Natural-language manual entry** - type “45 minutes on Acme website review yesterday” and turn it into a reviewable draft.
+8. **Recent-task shortcuts** - one-click “start again” for the most recent client/project/activity combinations.
 
 ### Workflow and planning
 
-9. **Task inbox** — separate non-billable task ideas from time entries; tasks can be promoted into a timer entry after review.
-10. **Recurring tasks** — weekly/monthly prompts for repeated client work.
-11. **Due dates and priorities** — useful only after a true task entity exists; do not overload time entries.
-12. **Calendar integration** — turn meetings into reviewable time drafts, never silently bill calendar duration.
-13. **Idle reminders** — optional local notifications when a timer has run unusually long; user-controlled and privacy-preserving.
+9. **Task inbox** - separate non-billable task ideas from time entries; tasks can be promoted into a timer entry after review.
+10. **Recurring tasks** - weekly/monthly prompts for repeated client work.
+11. **Due dates and priorities** - useful only after a true task entity exists; do not overload time entries.
+12. **Calendar integration** - turn meetings into reviewable time drafts, never silently bill calendar duration.
+13. **Idle reminders** - optional local notifications when a timer has run unusually long; user-controlled and privacy-preserving.
 
 ### Reporting and intelligence
 
-14. **Client/project health** — fixed-budget burn-down, utilization, and remaining estimate.
-15. **AI summaries** — summarize notes/tags for a selected period, with explicit “draft only” language and no automatic external sharing.
-16. **Anomaly checks** — flag missing descriptions, unusually long entries, or entries with no rate before export.
-17. **Approval/export workflow** — lock a period after review and export a signed report.
+14. **Client/project health** - fixed-budget burn-down, utilization, and remaining estimate.
+15. **AI summaries** - summarize notes/tags for a selected period, with explicit “draft only” language and no automatic external sharing.
+16. **Anomaly checks** - flag missing descriptions, unusually long entries, or entries with no rate before export.
+17. **Approval/export workflow** - lock a period after review and export a signed report.
 
 ### Collaboration and infrastructure
 
-18. **R2 asset storage** — private upload, content-type/size validation, signed URLs, thumbnails, and deletion policy.
-19. **Multi-user/team roles** — required before shared task inboxes or approvals; every query needs `user_id`/workspace scoping.
-20. **Offline/PWA queue** — idempotent entry writes and conflict resolution before enabling offline capture.
+18. **R2 asset storage** - private upload, content-type/size validation, signed URLs, thumbnails, and deletion policy.
+19. **Multi-user/team roles** - required before shared task inboxes or approvals; every query needs `user_id`/workspace scoping.
+20. **Offline/PWA queue** - idempotent entry writes and conflict resolution before enabling offline capture.
 
 ## 3. Prioritization
 
@@ -63,10 +63,10 @@ The product is strongest when it makes the first useful action obvious: decide w
 
 Add nullable fields:
 
-- `customers.image_url` — optional HTTPS/HTTP client avatar/logo URL.
-- `projects.image_url` — optional HTTPS/HTTP project image URL.
-- `activities.emoji` — optional short emoji label for a task/activity.
-- `activities.image_url` — optional HTTPS/HTTP task/activity image URL.
+- `customers.image_url` - optional HTTPS/HTTP client avatar/logo URL.
+- `projects.image_url` - optional HTTPS/HTTP project image URL.
+- `activities.emoji` - optional short emoji label for a task/activity.
+- `activities.image_url` - optional HTTPS/HTTP task/activity image URL.
 
 Update `db/schema.sql` and add the dated additive migration (matching this repository's existing migration convention). Existing rows remain valid and render their normal names when metadata is absent.
 

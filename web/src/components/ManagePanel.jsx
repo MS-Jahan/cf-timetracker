@@ -67,7 +67,7 @@ function ProjectRow({ project, customers, busy, onSave, onArchive }) {
       </td>
       <td className="py-2"><CurrencySelect value={currency} onChange={(value) => setDraft({ ...draft, currency: value === (client?.currency || "USD") ? "" : value })} /></td>
       <td className="py-2"><span className="flex items-center gap-2"><input type="number" min="0" step="0.01" className="input input-sm figure w-28" aria-label="Project rate" value={draft.rate} onChange={(e) => setDraft({ ...draft, rate: e.target.value })} /><span className="text-sm ink-muted">per hour</span></span></td>
-      <td className="py-2 text-sm ink-muted">{Number(draft.rate) === 0 ? `inherits ${client?.name ?? "client"} rate: ${client ? formatMoney(client.hourly_rate, currency) : "—"}/h` : `${formatMoney(draft.rate, currency)}/h`}</td>
+      <td className="py-2 text-sm ink-muted">{Number(draft.rate) === 0 ? `inherits ${client?.name ?? "client"} rate: ${client ? formatMoney(client.hourly_rate, currency) : "-"}/h` : `${formatMoney(draft.rate, currency)}/h`}</td>
       <td className="py-2 text-right"><div className="flex justify-end gap-2"><SaveButton dirty={dirty} busy={busy} onClick={() => onSave({ name: draft.name, customerId: draft.customerId, budgetType: draft.budgetType, rate: Number(draft.rate), currency: draft.currency, imageUrl: draft.imageUrl })} /><ArchiveButton busy={busy} onClick={onArchive} /></div></td>
     </tr>
   );
@@ -161,7 +161,7 @@ export default function ManagePanel({
       </div>
 
       {/* Create forms: the identity image leads each row, then name, then the
-          remaining fields — one grid so labels and inputs stay flush. */}
+          remaining fields - one grid so labels and inputs stay flush. */}
       <div className="mt-4 grid grid-cols-2 items-end gap-x-5 gap-y-4 bg-base-200 p-4 sm:grid-cols-[auto_1fr_auto_auto_auto]">
         <div className="flex items-end"><ImagePicker value={customer.imageUrl} name={customer.name} label="Client image" onChange={(imageUrl) => setCustomer({ ...customer, imageUrl })} /></div>
         <div className="min-w-[10rem]"><label className="field-label" htmlFor="cust-name">New client</label><input id="cust-name" className="input input-sm w-full" placeholder="Northwind" value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} /></div>
@@ -185,7 +185,7 @@ export default function ManagePanel({
         <div className="min-w-[10rem]"><label className="field-label" htmlFor="act-name">New activity</label><input id="act-name" className="input input-sm w-full" placeholder="Code review" value={activity.name} onChange={(e) => setActivity({ ...activity, name: e.target.value })} /></div>
         <div><label className="field-label" htmlFor="act-emoji">Emoji</label><EmojiPicker value={activity.emoji} label="New activity emoji" onChange={(emoji) => setActivity({ ...activity, emoji })} /></div>
         <button type="button" className="btn btn-primary btn-sm justify-self-start" disabled={busy || !activity.name.trim()} onClick={addActivity}><Icon name="plus" size={15} />{busy ? "Adding…" : "Add activity"}</button>
-        <p className="col-span-2 text-sm ink-muted sm:col-span-3 sm:col-start-2">Activities are shared — Development, Meeting, Design… Pick an emoji from the picker, or paste any emoji into its search box.</p>
+        <p className="col-span-2 text-sm ink-muted sm:col-span-3 sm:col-start-2">Activities are shared - Development, Meeting, Design… Pick an emoji from the picker, or paste any emoji into its search box.</p>
       </div>
 
       <div className="mt-10"><h3 className="mb-2 text-base font-semibold">Clients{customers.length > PAGE_SIZE ? <span className="ml-2 text-xs ink-muted">{customers.length} total</span> : null}</h3><p className="ink-muted mb-3 text-sm">The client's currency is used for every rate and billed amount on their projects and entries.</p><div className="overflow-x-auto"><table className="table table-sm"><thead><ListHead><th>Name</th><th>Currency</th><th>Rate</th><th /></ListHead></thead><tbody>{customers.length ? clientSlice.map((customerItem) => <CustomerRow key={customerItem.id} customer={customerItem} busy={busy} onSave={(patch) => onSaveCustomer(customerItem.id, patch)} onArchive={() => onArchiveCustomer(customerItem.id)} />) : <tr><td colSpan="4" className="py-6 text-sm ink-muted">No clients yet. Add your first client above to define a currency and hourly rate.</td></tr>}</tbody></table></div><Pager page={clientPage} pages={clientPages} onPage={setClientPage} /></div>

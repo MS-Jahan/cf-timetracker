@@ -24,7 +24,7 @@ export default function CurrencySelect({ id, value, onChange, disabled = false, 
       >
         {CURRENCIES.map((c) => (
           <option key={c.code} value={c.code}>
-            {c.code} — {c.name} ({c.symbol})
+            {c.code} - {c.name} ({c.symbol})
           </option>
         ))}
         <option value="__custom">Custom code…</option>

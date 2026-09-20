@@ -17,10 +17,10 @@
 - The web UI is unaffected (it rides Access); native apps store the token in device settings.
 
 ### Entries by period (mobile + web)
-- New `GET /api/entries?fromMs=&toMs=&limit=&offset=` — paginated history in a half-open range, newest first, closed + running. Powers mobile period filters (last week / month / two months / custom) and any future web use.
+- New `GET /api/entries?fromMs=&toMs=&limit=&offset=` - paginated history in a half-open range, newest first, closed + running. Powers mobile period filters (last week / month / two months / custom) and any future web use.
 
 ### Voice capture (desktop + mobile)
-- Reuses the existing `POST /api/voice/parse` (Gemini server-side). The brief's "client-side Gemini token" flow is deliberately **not** implemented: the Worker keeps the key secret, audio is not persisted, and drafts are review-only — one less token lifecycle to manage on devices.
+- Reuses the existing `POST /api/voice/parse` (Gemini server-side). The brief's "client-side Gemini token" flow is deliberately **not** implemented: the Worker keeps the key secret, audio is not persisted, and drafts are review-only - one less token lifecycle to manage on devices.
 
 ## 2. Implementation slices
 

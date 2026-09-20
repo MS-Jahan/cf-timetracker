@@ -1,8 +1,8 @@
-// MCP server (JSON-RPC 2.0 over POST /mcp) — tasks T-M1..T-M4.
+// MCP server (JSON-RPC 2.0 over POST /mcp) - tasks T-M1..T-M4.
 //
 // Transport decision (T-M4): a plain JSON-RPC POST is sufficient for v1. The Streamable
 // HTTP transport spec allows a server to answer a POST with a single `application/json`
-// response (no SSE), which is what we do — no session id, no server-initiated messages.
+// response (no SSE), which is what we do - no session id, no server-initiated messages.
 // Every tool is request/response, so SSE adds machinery with no capability gain. Revisit
 // only if a client demands `text/event-stream` or long-lived sessions.
 
@@ -88,7 +88,7 @@ async function callTool(env, name, args = {}) {
       const res = await startTimer(env, args);
       if (res.status === "ok") return { success: true, timer: res.timer };
       // JSON-RPC has no HTTP status to carry, so the conflict travels as `code`
-      // ("timer_running") inside an isError tool result — MCP's transport-neutral
+      // ("timer_running") inside an isError tool result - MCP's transport-neutral
       // equivalent of the REST 409.
       return { error: res.error, ...(res.code ? { code: res.code } : {}), _isError: true };
     }
@@ -191,7 +191,7 @@ export async function handleMcp(request, env) {
     return mcpResponse(rpcError(msg?.id, ERR.INVALID_REQUEST, "Invalid Request: jsonrpc must be \"2.0\" with a method"));
   }
 
-  // Notifications (no id) get no JSON-RPC response — 202 with an empty body.
+  // Notifications (no id) get no JSON-RPC response - 202 with an empty body.
   if (msg.id === undefined) return mcpResponse(null, 202);
 
   try {

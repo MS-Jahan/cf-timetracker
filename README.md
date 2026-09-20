@@ -1,18 +1,22 @@
-# cf-timetracker
+<p align="center">
+  <img src="docs/assets/gh-banner.png" alt="cf-timetracker - Track today · A better tomorrow" width="100%" />
+</p>
+
+<h1 align="center">CF Time Tracker</h1>
 
 Kimai-style time tracker running entirely on Cloudflare's free tier: **Pages** (Vite + React + Tailwind) → **Worker** (REST + MCP) → **D1** (SQLite at the edge), with optional **Google Sheets sync** and **Gemini voice capture**. A shared **Flutter** client covers desktop and mobile.
 
-🌍 **Live demo:** [https://cf-timetracker.pages.dev](https://cf-timetracker.pages.dev) — sample data included, reset anytime.
+🌍 **Live demo:** [https://cf-timetracker.pages.dev](https://cf-timetracker.pages.dev) - sample data included, reset anytime.
 
 ## Features
 
-- **One-click timer** with a database-enforced single-running-timer guarantee (partial unique index — two tabs can't both start)
+- **One-click timer** with a database-enforced single-running-timer guarantee (partial unique index - two tabs can't both start)
 - **Billable ledger**: closed entries with client/project/activity, tags, rates, editable history; per-entry currency
 - **Dashboards**: daily activity, by-client / by-project / by-activity breakdowns with clickable detail pages (`/clients/:id`, `/projects/:id`, `/activities/:id`)
 - **Master data**: clients (currency, default rate), projects (fixed/hourly budgets, per-project curated task lists), activities (emoji, avatars)
 - **47 currencies** with per-client currency and aggregate-currency rollups
-- **Print/PDF timesheet**: professional `window.print()` output with summary tables — no server renderer
-- **MCP server** (`POST /mcp`, JSON-RPC 2.0): `get_active_timer`, `start_timer`, `stop_timer`, `query_summary` — wire the tracker into Claude or any MCP client
+- **Print/PDF timesheet**: professional `window.print()` output with summary tables - no server renderer
+- **MCP server** (`POST /mcp`, JSON-RPC 2.0): `get_active_timer`, `start_timer`, `stop_timer`, `query_summary` - wire the tracker into Claude or any MCP client
 - **Google Sheets sync**: Apps Script receiver with Entry-ID dedupe and shared-secret auth
 - **Voice capture**: Gemini turns a short recording into a reviewable timer draft (server-side key, nothing persisted)
 - **Demo mode**: splash screen, demo banner, one-click reset to a seeded dataset
@@ -34,7 +38,7 @@ Cloudflare D1 (SQLite) ── time_entries, customers, projects, activities, pro
         └──► Google Apps Script webhook (Sheets sync, dedupe on Entry ID)
 ```
 
-- **Single source of truth for mutations**: `core.js`. Timer start/stop, validation, FK checks — REST and MCP share one implementation.
+- **Single source of truth for mutations**: `core.js`. Timer start/stop, validation, FK checks - REST and MCP share one implementation.
 - **Correctness in the database**: `idx_entries_single_running` is a partial unique index on `is_running`; concurrency bugs surface as 409s, not double timers.
 - **Times are epoch milliseconds**; duration/cost are derived, never hand-edited.
 - **History is never deleted**: master data archives softly (`archived_at`), old entries keep their joins.
@@ -80,7 +84,7 @@ The concurrency proof (`scripts/check-single-timer.mjs`) starts its own Wrangler
 
 ## Deploy
 
-Full runbooks: [`docs/2026-09-20-demo-deploy.md`](docs/2026-09-20-demo-deploy.md) (demo — what this repo currently runs) and [`docs/2026-09-20-deploy-runbook.md`](docs/2026-09-20-deploy-runbook.md) (production + Zero Trust + rollback). Short version:
+Full runbooks: [`docs/2026-09-20-demo-deploy.md`](docs/2026-09-20-demo-deploy.md) (demo - what this repo currently runs) and [`docs/2026-09-20-deploy-runbook.md`](docs/2026-09-20-deploy-runbook.md) (production + Zero Trust + rollback). Short version:
 
 ```bash
 cd worker && npx wrangler deploy
@@ -104,7 +108,7 @@ Secrets (optional): `npx wrangler secret put GAS_SECRET` (Sheets sync) and `GEMI
 
 ## Docs
 
-Everything is documented in dated files under `docs/` — architecture, phased plan, design passes, deploy runbooks, follow-ups. Start at `docs/2026-09-19-initial-prompt-system-architecture.md`.
+Everything is documented in dated files under `docs/` - architecture, phased plan, design passes, deploy runbooks, follow-ups. Start at `docs/2026-09-19-initial-prompt-system-architecture.md`.
 
 ## License
 

@@ -198,7 +198,7 @@ body {
 
 /* All animations are gated behind prefers-reduced-motion so they vanish for
    users who prefer reduced motion. Duration and easing are kept short and
-   non-distracting — this is a ledger, not a game. */
+   non-distracting - this is a ledger, not a game. */
 
 @keyframes fadeIn {
   from { opacity: 0; }

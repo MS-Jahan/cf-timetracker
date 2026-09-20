@@ -23,7 +23,7 @@ const base = (process.argv[2] || "http://127.0.0.1:8787").replace(/\/$/, "");
 
 let failures = 0;
 function check(name, ok, detail = "") {
-  console.log(`${ok ? "  ✔" : "  ✘"} ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(`${ok ? "  ✔" : "  ✘"} ${name}${detail ? ` - ${detail}` : ""}`);
   if (!ok) failures++;
 }
 
@@ -146,7 +146,7 @@ async function main() {
 
 function pickRefs(bootstrap) {
   // The project determines the client (time_entries requires project.customer_id to
-  // match), so pick a project first and take its owner — the first customer and first
+  // match), so pick a project first and take its owner - the first customer and first
   // project in the bootstrap lists do not necessarily belong together.
   const p = bootstrap?.projects?.[0];
   const a = bootstrap?.activities?.[0]?.id;

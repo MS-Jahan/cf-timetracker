@@ -32,11 +32,11 @@ Wrangler holds one OAuth login at a time. `worker/wrangler.toml` carries both co
 
 | Var | Value / status |
 |---|---|
-| `DEMO_MODE` | `"false"` — reset endpoint returns 403 |
+| `DEMO_MODE` | `"false"` - reset endpoint returns 403 |
 | `ALLOWED_ORIGINS` | `https://timetracker.sabit.dev,https://timetracker-8ss.pages.dev` |
-| `GAS_SECRET` | not set — set via `npx wrangler secret put GAS_SECRET` if Sheets sync wanted (same value goes into the Apps Script `SHARED_SECRET` property) |
-| `GEMINI_API_KEY` | not set — optional, enables voice capture |
-| `APP_TOKEN` | not set — optional, would require native clients to send `X-App-Token` |
+| `GAS_SECRET` | not set - set via `npx wrangler secret put GAS_SECRET` if Sheets sync wanted (same value goes into the Apps Script `SHARED_SECRET` property) |
+| `GEMINI_API_KEY` | not set - optional, enables voice capture |
+| `APP_TOKEN` | not set - optional, would require native clients to send `X-App-Token` |
 
 ## Bug fixed during this deploy
 

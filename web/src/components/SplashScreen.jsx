@@ -25,38 +25,9 @@ export default function SplashScreen({ onDone }) {
       aria-busy="true"
       aria-label="Loading application"
     >
-      {/* Clock SVG — simple, clean, matches the ledger theme */}
+      {/* Brand mark (web/public/logo-mark.png, transparent) */}
       <div className={phase === "logo" ? "animate-scale-in" : ""}>
-        <svg
-          width="80"
-          height="80"
-          viewBox="0 0 80 80"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          aria-hidden="true"
-        >
-          <circle cx="40" cy="40" r="36" stroke="currentColor" strokeWidth="3" className="text-base-content" />
-          <circle cx="40" cy="40" r="3" fill="currentColor" className="text-accent" />
-          {/* Hour hand */}
-          <line x1="40" y1="40" x2="40" y2="22" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className="text-base-content" />
-          {/* Minute hand */}
-          <line x1="40" y1="40" x2="54" y2="40" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="text-accent" />
-          {/* Hour marks */}
-          {[0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330].map((deg) => (
-            <line
-              key={deg}
-              x1="40"
-              y1="8"
-              x2="40"
-              y2={deg % 90 === 0 ? "14" : "11"}
-              stroke="currentColor"
-              strokeWidth={deg % 90 === 0 ? "2" : "1.5"}
-              strokeLinecap="round"
-              className="text-base-content"
-              transform={`rotate(${deg} 40 40)`}
-            />
-          ))}
-        </svg>
+        <img src="/logo-mark.png" alt="CF Time Tracker" width="96" height="88" />
       </div>
 
       <p className="mt-4 text-lg font-semibold tracking-tight text-base-content">

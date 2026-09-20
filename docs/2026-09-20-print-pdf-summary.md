@@ -1,4 +1,4 @@
-# Print/PDF Enhancements — Implementation Summary
+# Print/PDF Enhancements - Implementation Summary
 
 **Date:** 2026-09-20  
 **Status:** ✅ Complete
@@ -98,7 +98,7 @@ Added:
 │ ─────┴────────┴─────────┴─────┴─────│
 │ Total: 18.5 hours, $900.00          │
 ├─────────────────────────────────────┤
-│ CS Time Tracker — Generated on ...  │
+│ CS Time Tracker - Generated on ...  │
 └─────────────────────────────────────┘
 ```
 

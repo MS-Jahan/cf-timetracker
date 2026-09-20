@@ -1,4 +1,4 @@
-/* Print / PDF timesheet styles — CS Time Tracker
+/* Print / PDF timesheet styles - CS Time Tracker
    Professional layout: header → summary → entries table.
    Mobile-responsive: scales gracefully from A4 to letter to mobile print. */
 
@@ -45,7 +45,7 @@
     margin: 12mm;
   }
 
-  /* Force clean white/black for print — no theme colors */
+  /* Force clean white/black for print - no theme colors */
   body {
     background: #fff !important;
     background-image: none !important;
@@ -66,7 +66,7 @@
     overflow: visible !important;
   }
 
-  /* The grand total prints once, at the very end — tfoot as a normal row
+  /* The grand total prints once, at the very end - tfoot as a normal row
      group stops browsers repeating it at the bottom of every page. */
   tfoot {
     display: table-row-group;
@@ -112,18 +112,12 @@
     page-break-after: avoid;
   }
 
-  /* Logo placeholder */
+  /* Brand logo (web/public/logo.png) */
   .print-logo {
-    display: inline-block;
-    width: 20mm;
-    height: 20mm;
-    border: 1px dashed #999;
-    text-align: center;
-    line-height: 20mm;
-    color: #999;
-    font-size: 8pt;
-    margin-right: 4mm;
-    vertical-align: middle;
+    display: block;
+    width: 26mm;
+    height: auto;
+    margin-right: 2mm;
   }
 
   /* Header layout */
@@ -256,7 +250,7 @@
   table.print-entries-table col.col-total { width: 10%; }
   table.print-entries-table col.col-note { width: 18%; }
 
-  /* Footer — fixed within the page box so Chromium repeats it on every
+  /* Footer - fixed within the page box so Chromium repeats it on every
      printed page of a multi-page timesheet. */
   .print-footer {
     position: fixed;

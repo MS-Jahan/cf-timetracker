@@ -99,7 +99,7 @@ export default function VoiceTaskCapture({ disabled = false, onDraft }) {
           Stop recording
         </button>
       ) : (
-        <button type="button" className="btn btn-ghost btn-sm ring-1 ring-inset ring-base-300" disabled={disabled || isProcessing} onClick={start} title="Optional: creates a draft only — you review it before starting.">
+        <button type="button" className="btn btn-ghost btn-sm ring-1 ring-inset ring-base-300" disabled={disabled || isProcessing} onClick={start} title="Optional: creates a draft only - you review it before starting.">
           <Icon name="microphone" size={16} />
           {isProcessing ? "Understanding…" : "Describe by voice"}
         </button>
@@ -110,8 +110,8 @@ export default function VoiceTaskCapture({ disabled = false, onDraft }) {
         </span>
       ) : (
         // Idle hint stays out of the way: revealed on hover/focus, title covers touch.
-        <span className="text-sm ink-muted opacity-0 transition-opacity group-hover/voice:opacity-100 focus-within:opacity-100" title="Optional: creates a draft only — you review it before starting.">
-          Optional: creates a draft only — you review it before starting.
+        <span className="text-sm ink-muted opacity-0 transition-opacity group-hover/voice:opacity-100 focus-within:opacity-100" title="Optional: creates a draft only - you review it before starting.">
+          Optional: creates a draft only - you review it before starting.
         </span>
       )}
       {isSuccess ? <span className="text-sm text-success" role="status">{success}</span> : null}

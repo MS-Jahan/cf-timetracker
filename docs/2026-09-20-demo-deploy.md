@@ -11,7 +11,7 @@
 | API (Worker) | https://cf-timetracker-api.ssarwarjahan.workers.dev |
 | MCP | `POST https://cf-timetracker-api.ssarwarjahan.workers.dev/mcp` |
 
-**Naming rule:** the Worker is named `cf-timetracker-api`, **not** `cf-timetracker`. Workers and Pages now share one namespace — a Worker named `cf-timetracker` blocks creating the Pages project `cf-timetracker` (and therefore `cf-timetracker.pages.dev`). If you redeploy, keep `name = "cf-timetracker-api"` in `worker/wrangler.toml`.
+**Naming rule:** the Worker is named `cf-timetracker-api`, **not** `cf-timetracker`. Workers and Pages now share one namespace - a Worker named `cf-timetracker` blocks creating the Pages project `cf-timetracker` (and therefore `cf-timetracker.pages.dev`). If you redeploy, keep `name = "cf-timetracker-api"` in `worker/wrangler.toml`.
 
 ## 1. Prerequisites
 
@@ -29,7 +29,7 @@ for f in schema.sql migrations/*.sql; do
 done
 ```
 
-Note: `archived_at` / `image_url` migrations report "duplicate column" on a fresh database — expected, `schema.sql` already includes those columns.
+Note: `archived_at` / `image_url` migrations report "duplicate column" on a fresh database - expected, `schema.sql` already includes those columns.
 
 ## 3. Worker
 
@@ -49,7 +49,7 @@ curl -s -X POST .../api/demo/reset                                           # {
 
 ## 4. Frontend (Pages)
 
-`VITE_API_BASE` is baked in at **build time** — always pass it:
+`VITE_API_BASE` is baked in at **build time** - always pass it:
 
 ```bash
 cd web
@@ -76,7 +76,7 @@ If deploy complains about `.wrangler/deploy/config.json`, delete `web/.wrangler`
 ## 6. Demo-mode internals
 
 - Worker env `DEMO_MODE=true` enables `POST /api/demo/reset` (`resetDemoData` in `worker/src/core.js`); returns 403 when off.
-- Reset **resolves master-data ids by name** after `INSERT OR IGNORE` — activities have a UNIQUE `name`, and default `General`/`Meeting` rows may pre-exist under different ids. Entries always reference the resolved ids (this fixed the original `FOREIGN KEY constraint failed` bug).
+- Reset **resolves master-data ids by name** after `INSERT OR IGNORE` - activities have a UNIQUE `name`, and default `General`/`Meeting` rows may pre-exist under different ids. Entries always reference the resolved ids (this fixed the original `FOREIGN KEY constraint failed` bug).
 - Client reads `GET /api/demo/status` on mount → banner, header reset button, Settings demo card, splash.
 
 ## 7. Local dev notes

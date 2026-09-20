@@ -12,8 +12,8 @@ function buildSummary(entries) {
     const key = `${e.customer_id || "?"}|${e.project_id || "?"}`;
     if (!map.has(key)) {
       map.set(key, {
-        client: e.customer_name || "—",
-        project: e.project_name || "—",
+        client: e.customer_name || "-",
+        project: e.project_name || "-",
         currency: e.currency || "USD",
         total_seconds: 0,
         total_cost: 0,
@@ -31,7 +31,7 @@ function buildSummary(entries) {
 }
 
 /**
- * The currency with the most billed value in the selection — the one the printed
+ * The currency with the most billed value in the selection - the one the printed
  * timesheet's headline total should carry. Individual rows always show their own
  * entry currency.
  */
@@ -81,7 +81,7 @@ export default function Ledger({ entries, scopeLabel, onEdit, emptyMessage }) {
       {/* Print-only header: CF Time Tracker branding + period info */}
       <header className="print-header">
         <div style={{ display: "flex", alignItems: "center", gap: "4mm" }}>
-          <div className="print-logo">LOGO</div>
+          <img src="/logo.png" alt="CF Time Tracker" className="print-logo" />
           <div>
             <h1>CF Time Tracker</h1>
             <p className="print-meta">
@@ -177,20 +177,20 @@ export default function Ledger({ entries, scopeLabel, onEdit, emptyMessage }) {
                 >
                   <td className="figure ink-muted text-left">{utcDate(e.start_time)}</td>
                   <td className="text-left">
-                    {e.customer_id ? <Link className="link link-hover" to={`/clients/${e.customer_id}`}>{e.customer_name || "—"}</Link> : (e.customer_name || "—")}
+                    {e.customer_id ? <Link className="link link-hover" to={`/clients/${e.customer_id}`}>{e.customer_name || "-"}</Link> : (e.customer_name || "-")}
                   </td>
                   <td className="text-left">
-                    {e.project_id ? <Link className="link link-hover" to={`/projects/${e.project_id}`}>{e.project_name || "—"}</Link> : (e.project_name || "—")}
+                    {e.project_id ? <Link className="link link-hover" to={`/projects/${e.project_id}`}>{e.project_name || "-"}</Link> : (e.project_name || "-")}
                   </td>
                   <td className="text-left">
-                    {e.activity_id ? <Link className="link link-hover" to={`/activities/${e.activity_id}`}>{e.activity_name || "—"}</Link> : (e.activity_name || "—")}
+                    {e.activity_id ? <Link className="link link-hover" to={`/activities/${e.activity_id}`}>{e.activity_name || "-"}</Link> : (e.activity_name || "-")}
                   </td>
                   <td className="figure text-right">{e.is_running ? "recording" : formatDuration(e.duration_seconds)}</td>
                   <td className="figure ink-muted hidden text-right lg:table-cell">
                     {formatMoney(e.rate_applied, e.currency || currency)}
                   </td>
                   <td className="figure text-right font-medium">
-                    {e.is_running ? "—" : formatMoney(e.cost, e.currency || currency)}
+                    {e.is_running ? "-" : formatMoney(e.cost, e.currency || currency)}
                   </td>
                   <td className="max-w-[20rem] truncate text-left">
                     {e.description || ""}
@@ -227,7 +227,7 @@ export default function Ledger({ entries, scopeLabel, onEdit, emptyMessage }) {
 
       {/* Print-only footer */}
       <div className="print-footer">
-        CF Time Tracker — Timesheet printed on {generatedDate} — {closed.length} entries, {toHours(totalSeconds)} hours
+        CF Time Tracker - Timesheet printed on {generatedDate} - {closed.length} entries, {toHours(totalSeconds)} hours
       </div>
     </section>
   );

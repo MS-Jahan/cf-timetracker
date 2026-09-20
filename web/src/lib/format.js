@@ -31,7 +31,7 @@ export function formatMoney(value, currency = "USD") {
   return `${currency} ${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 }
 
-/** UTC date string (YYYY-MM-DD) for an epoch-ms timestamp — matches SQLite date(start_time/1000,'unixepoch'). */
+/** UTC date string (YYYY-MM-DD) for an epoch-ms timestamp - matches SQLite date(start_time/1000,'unixepoch'). */
 export function utcDate(ms) {
   return new Date(ms).toISOString().slice(0, 10);
 }

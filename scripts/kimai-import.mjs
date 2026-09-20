@@ -3,7 +3,7 @@
  * Import a Kimai CSV export into cf-timetracker.
  *
  * Kimai's export format (Date, From, To, Customer, Project, Activity, …) is the
- * ONE officially supported import format for this app — other CSVs must be
+ * ONE officially supported import format for this app - other CSVs must be
  * converted to it first. Column order does not matter; header names must match
  * Kimai's export.
  *
@@ -11,13 +11,13 @@
  * entries POST to /api/import/csv in batches (default 200 rows per request,
  * worker cap 1000). The worker match-or-creates masters by name, dedupes rows
  * on (project, activity, start), derives duration/cost server-side, and inserts
- * each batch atomically — so re-running the same file adds nothing.
+ * each batch atomically - so re-running the same file adds nothing.
  *
  * Environment:
  *   TRACKER_URL    e.g. https://timetracker-api.safe-browsing.workers.dev
  *   TRACKER_TOKEN  optional, if the worker has APP_TOKEN set (X-App-Token)
  *   KIMAI_TZ       IANA zone the Kimai export's naive times are in
- *                  (default: Asia/Dhaka — Kimai exports local wall-clock times)
+ *                  (default: Asia/Dhaka - Kimai exports local wall-clock times)
  *   CHUNK          entries per request (default 200, max 1000)
  *   DRY_RUN        1 = report the plan without writing anything
  *
@@ -159,7 +159,7 @@ const entries = records.map((r) => ({
   startTime: r.startMs, endTime: r.endMs, hourlyRate: r.hourlyRate,
 }));
 
-console.log(`\nPlan: ${customers.length} clients, ${projects.length} projects, ${activities.length} activities, ${entries.length} entries${dry ? " (DRY RUN — nothing written)" : ""}`);
+console.log(`\nPlan: ${customers.length} clients, ${projects.length} projects, ${activities.length} activities, ${entries.length} entries${dry ? " (DRY RUN - nothing written)" : ""}`);
 
 /* ---------- chunked batched import ---------- */
 

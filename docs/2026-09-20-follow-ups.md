@@ -28,8 +28,8 @@
 ## Open production items (need the account owner, not code)
 
 - T-W4: set prod `ALLOWED_ORIGINS` (runbook §2).
-- T-Z1–T-Z3: Access apps, remote D1, secrets, deploys, smoke checklist (runbook §§1–6).
-- T-G1–G3 final acceptance: real-Sheets E2E of the deployed Web App (runbook §4) — code and local proof are done (`gas/test/gas-receiver.test.mjs`).
+- T-Z1-T-Z3: Access apps, remote D1, secrets, deploys, smoke checklist (runbook §§1-6).
+- T-G1-G3 final acceptance: real-Sheets E2E of the deployed Web App (runbook §4) - code and local proof are done (`gas/test/gas-receiver.test.mjs`).
 
 ## Deliberately not built (with reasons)
 

@@ -1,4 +1,4 @@
-# Phased Delivery Plan — cf-timetracker
+# Phased Delivery Plan - cf-timetracker
 
 **Date:** 2026-09-19
 **Spec:** `2026-09-19-initial-prompt-system-architecture.md`
@@ -10,20 +10,20 @@
 
 Ship a production-usable Kimai-lite tracker on Cloudflare (Pages + Worker + D1 + GAS sync + MCP + Zero Trust) in thin vertical slices, each smoke-tested before the next begins.
 
-## Phase 0 — Repo scaffolding & docs (done, verify)
+## Phase 0 - Repo scaffolding & docs (done, verify)
 
 - **Goal:** dated docs + `AGENTS.md` + empty target layout exist.
 - **Exit:** `docs/2026-09-19-*.md` (4 files) + `AGENTS.md` committed; `db/ worker/ web/ gas/ scripts/` placeholders or `.gitkeep`.
 - **Verify:** `ls docs`, filenames match `YYYY-MM-DD-<kebab>.md`.
 
-## Phase 1 — D1 schema, seed, toolchain
+## Phase 1 - D1 schema, seed, toolchain
 
 - **Goal:** versioned `db/schema.sql` + `db/seed.sql`, working `wrangler d1` loop.
 - **Work:** port schema from spec; add FK enforcement note (`PRAGMA foreign_keys = ON` per connection); dev seed (2 customers, 3 projects, 4 activities, 5 closed entries + 0 running); document `wrangler d1 execute` + `SELECT 1` check.
 - **Exit:** fresh D1 created from `schema.sql`, seeded, `idx_*` present.
 - **Verify:** `wrangler d1 execute <DB> --command="SELECT count(*) FROM time_entries"`.
 
-## Phase 2 — Worker REST API (core value)
+## Phase 2 - Worker REST API (core value)
 
 - **Goal:** `GET /api/bootstrap`, `POST /api/timer/start`, `POST /api/timer/stop`, `POST /api/sync/google-sheets`, CORS `OPTIONS`.
 - **Work:**
@@ -36,35 +36,35 @@ Ship a production-usable Kimai-lite tracker on Cloudflare (Pages + Worker + D1 +
 - **Exit:** full start → stop → bootstrap cycle via `curl` against `wrangler dev`.
 - **Verify:** recorded `curl` transcript: bootstrap empty → start 200 → start again 400 → stop 200 → bootstrap shows entry.
 
-## Phase 3 — MCP server (`POST /mcp`)
+## Phase 3 - MCP server (`POST /mcp`)
 
 - **Goal:** JSON-RPC 2.0 `tools/list` + `tools/call` for all four tools.
 - **Work:** implement `get_active_timer`, `start_timer` (validated), `stop_timer`, `query_summary` (date-range GROUP BY customer/project, totals + cost); JSON-RPC error envelopes (`-32602`, `-32601`, `-32603`); decide/scaffold SSE or Streamable HTTP only if a target client demands it.
 - **Exit:** `curl` `tools/list` + `tools/call` for each tool green.
 - **Verify:** start via MCP → `get_active_timer` shows running → stop via MCP → `query_summary` includes entry.
 
-## Phase 4 — Web UI (Kimai-lite on Pages)
+## Phase 4 - Web UI (Kimai-lite on Pages)
 
 - **Goal:** tracker bar, entries table, filters, CSV, print/PDF, Sheets button, wiring to Worker.
 - **Work:** Vite + React + Tailwind scaffold; `lib/api.js` (bootstrap/start/stop/sync); live tick display-only; filter controls (month/customer/project); CSV export client-side; `print.css` from spec + screen-hidden print header; empty/loading/error states; `VITE_API_BASE` env.
 - **Exit:** UI drives full timer cycle + CSV + print preview against local Worker.
 - **Verify:** `npm run build` clean; manual smoke transcript in task note.
 
-## Phase 5 — Google Apps Script sync E2E
+## Phase 5 - Google Apps Script sync E2E
 
 - **Goal:** reliable Worker → GAS → Sheet rows without duplicates.
 - **Work:** `gas/Code.gs` (header creation, `Entry ID` dedupe, shared-secret check, JSON responses); Worker passes secret header; month-filtered payload; doc Sheet columns + deploy steps (Execute as Me / Anyone).
 - **Exit:** two consecutive syncs of same month produce zero new rows the second time.
 - **Verify:** sync → Sheet count N → re-sync → still N; error case (bad secret) logged.
 
-## Phase 6 — Zero Trust, hardening, prod deploy
+## Phase 6 - Zero Trust, hardening, prod deploy
 
 - **Goal:** locked-down prod on custom domains.
 - **Work:** Access Application + policy (`@yourcompany.com` / allowlist, PIN or Google); validate `Cf-Access-Authenticated-User-Email` passthrough; prod CORS allowlist; `wrangler secret` for GAS URL/secret; Pages + Worker deploys; custom domains.
 - **Exit:** unauthenticated browser blocked by Access; API serves UI origin only.
 - **Verify:** prod `curl` bootstrap 200 from allowed origin, Access challenge from incognito.
 
-## Phase 7 — QA, edge cases, handover
+## Phase 7 - QA, edge cases, handover
 
 - **Goal:** trustworthy timesheets.
 - **Work:** double-click/double-tab timer test, stop-with-none, timezone/month-boundary entries, long-running timer display, CSV/print spot-check vs DB totals, MCP schema compat check; record all transcripts; file follow-up dated doc for anything deferred (multi-user, invoicing, fixed-budget burn-down).

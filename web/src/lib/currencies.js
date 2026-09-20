@@ -2,7 +2,7 @@
  * Currency catalog for pickers and money formatting.
  *
  * The list covers the currencies a small studio actually bills in; anything else can
- * still be typed manually as a 3-letter ISO 4217 code — `currencyName`/`currencySymbol`
+ * still be typed manually as a 3-letter ISO 4217 code - `currencyName`/`currencySymbol`
  * simply return "" and `formatMoney` falls back to Intl's own knowledge of the code.
  */
 export const CURRENCIES = [
@@ -60,7 +60,7 @@ const BY_CODE = new Map(CURRENCIES.map((c) => [c.code, c]));
 export const currencyName = (code) => BY_CODE.get(code)?.name || "";
 export const currencySymbol = (code) => BY_CODE.get(code)?.symbol || "";
 
-/** "USD — US Dollar ($)" style label for dropdown options and hints. */
+/** "USD - US Dollar ($)" style label for dropdown options and hints. */
 export function currencyLabel(code) {
   const entry = BY_CODE.get(code);
   if (entry) return `${entry.name} (${entry.symbol})`;

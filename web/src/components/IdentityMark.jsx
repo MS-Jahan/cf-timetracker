@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-/** First letters of the first two words, uppercased — "" for an empty name. */
+/** First letters of the first two words, uppercased - "" for an empty name. */
 export function initialsOf(name) {
   return String(name).trim().split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
 }

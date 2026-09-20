@@ -1,14 +1,14 @@
-# Frontend Design Pass — timesheet as a ledger
+# Frontend Design Pass - timesheet as a ledger
 
 **Date:** 2026-09-19
-**Method:** `frontend-design` skill (anthropics/claude-code) — plan against the brief, critique against generic defaults, build, screenshot, revise.
+**Method:** `frontend-design` skill (anthropics/claude-code) - plan against the brief, critique against generic defaults, build, screenshot, revise.
 **Applies to:** `web/` presentation layer only. No API, worker or data-model changes.
 
 ## 1. The brief
 
 **Subject:** a billable-hours tracker for a small studio, running on Cloudflare behind Zero Trust, with an optional export to a Google Sheet.
 
-**Audience:** the person billing the hours — someone who works in it for ten seconds at a time, all day, and then once a month sends a timesheet to a client.
+**Audience:** the person billing the hours - someone who works in it for ten seconds at a time, all day, and then once a month sends a timesheet to a client.
 
 **Primary job:** start and stop a timer without thinking, and trust the numbers enough to invoice from them.
 
@@ -23,8 +23,8 @@ Checked against the skill's list of AI-generated defaults:
 | SaaS-card kit: identical rounded cards, one radius, same soft shadow, gradient washes | **Yes, fully** | every section is `card` + `shadow-sm`; body has two radial gradient washes; the wordmark is `bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text` |
 | ALL-CAPS eyebrow above every heading | **Yes** | `.section-title` uppercase on Client, Project, Activity, Elapsed, Month, Period, Currency, Rate/hour, API base… |
 | Meta strings joined with middle dots | **Yes** | "2 entries · $0.50", "7 entries · $610.50", "6.5 h · $610.00" |
-| Monospace for small data labels | Partly | elapsed/durations use `font-mono` — defensible for figures, but it was applied as a texture, not a discipline |
-| `WORD — fragment` labels | **Yes** | "Clients — set the per-hour rate used when a project has none" |
+| Monospace for small data labels | Partly | elapsed/durations use `font-mono` - defensible for figures, but it was applied as a texture, not a discipline |
+| `WORD - fragment` labels | **Yes** | "Clients - set the per-hour rate used when a project has none" |
 | Big number + small label + supporting stats as the hero | **Yes, exactly** | the four stat cards *are* the hero treatment the skill calls the default |
 | `→` appended to actions | No | we use ▶/■/⤓/🖨/⇪ glyphs instead (also noise) |
 
@@ -32,7 +32,7 @@ So: the previous pass was the default kit with a gradient on top. The redesign h
 
 ## 3. Design plan
 
-### Colour — 4 core values, one accent
+### Colour - 4 core values, one accent
 
 | Token | Light | Dark | Role |
 |---|---|---|---|
@@ -44,13 +44,13 @@ So: the previous pass was the default kit with a gradient on top. The redesign h
 
 Deliberately not: cream + terracotta (tell #1), near-black + acid accent (tell #2). The base is *cool* paper, not warm.
 
-### Type — one superfamily, two widths
+### Type - one superfamily, two widths
 
-IBM Plex **Sans** for UI, IBM Plex **Mono** for every figure (durations, rates, totals, clock). Plex was drawn for technical documentation and forms; the mono isn't a decorative texture here — it's what keeps a column of durations aligned when you scan for the wrong one. Benefits: one superfamily, distinct widths, no external font request (self-hosted via `@fontsource`, so Zero Trust and CSP stay intact).
+IBM Plex **Sans** for UI, IBM Plex **Mono** for every figure (durations, rates, totals, clock). Plex was drawn for technical documentation and forms; the mono isn't a decorative texture here - it's what keeps a column of durations aligned when you scan for the wrong one. Benefits: one superfamily, distinct widths, no external font request (self-hosted via `@fontsource`, so Zero Trust and CSP stay intact).
 
 Scale (1.200 minor third, body 15px): `0.75 / 0.875 / 1 / 1.25 / 1.5 / 2 / 2.75rem`. Weights: 400 body, 500 labels, 600 headings. No uppercase anywhere; labels are sentence case at 0.8125rem in ink at 55%.
 
-### Layout — one sheet, ruled
+### Layout - one sheet, ruled
 
 ```
 masthead   Timetracker ······························  Track  Settings
@@ -68,7 +68,7 @@ ledger     Date      Client    Project   Activity  Duration    Rate  Total
 ```
 
 - **Left-aligned, single column, max width 64rem** (a sheet, not a dashboard).
-- **Rules do the separating, not containers.** Hairline above each row, strong rule under the header, **double rule above the totals** — the accounting convention for a closed sum.
+- **Rules do the separating, not containers.** Hairline above each row, strong rule under the header, **double rule above the totals** - the accounting convention for a closed sum.
 - **No border radius (0), no shadows, no gradients.** Structure is drawn with lines, so the page reads as a form.
 - Numbers **right-aligned in mono**, money to 2 decimals always, durations always `HH:MM:SS`.
 - Nav is two underlined words, not pills.
@@ -89,29 +89,29 @@ Per-client colour dots, uppercase micro-labels, middle-dot meta strings, the fou
 
 | Before | After |
 |---|---|
-| "Track time" / "Filter & export" | (removed — the form and the ledger say what they are) |
+| "Track time" / "Filter & export" | (removed - the form and the ledger say what they are) |
 | "Start" / "Stop" | "Start timer" / "Stop timer" |
 | "Export CSV" / "Print / PDF" | "Download CSV" / "Print timesheet" |
 | "Sync now" / "Sync Sheets" | "Send to Google Sheets" |
 | "2 entries · $0.50" | "2 entries, $0.50" (comma, not a middle dot) |
 | "Could not load from the API" | "Could not reach the API at `<base>`. Check that the worker is running, then try again." |
 | "No entries match the current filters." | "No entries in this period. Start a timer, or widen the filters." |
-| "Clients — set the per-hour rate…" | "Clients and rates" |
+| "Clients - set the per-hour rate…" | "Clients and rates" |
 
 Errors state what happened and what to do; notices reuse the action's own verb ("Timer started", "Timer stopped", "12 entries sent to Google Sheets").
 
 ## 5. Build order
 
-1. `main.jsx` — import Plex Sans 400/500/600 + Plex Mono 400/500.
-2. `index.css` — two custom daisyUI themes (`ledger`, `ledger-dark`) carrying the tokens above, `--radius-*: 0`, `--depth: 0`; utilities for `.figure` (tabular mono) and `.rule`.
-3. `theme.js` — map preference → `data-theme` = `ledger` / `ledger-dark`; `system` removes the attribute and lets `--prefersdark` choose.
-4. `App.jsx` — masthead: wordmark in Plex Sans 600, underlined nav, no gradient.
-5. `PunchClock.jsx` (new) — the hero: clock, context, start/stop, and the week strip.
-6. `WeekStrip.jsx` (new) — last 7 days as a ruled tally, from bootstrap entries.
-7. `EntryForm.jsx` (was `TrackerBar`) — one form line with rules between fields.
-8. `Ledger.jsx` (was `EntriesTable`) — ruled rows, right-aligned figures, double-rule totals; filters move into the ledger header.
-9. `SettingsPage` / `ManagePanel` — form sheet, ruled lists.
-10. `print.css` — rules and columns survive; drop the daisyUI colour overrides that are no longer needed.
+1. `main.jsx` - import Plex Sans 400/500/600 + Plex Mono 400/500.
+2. `index.css` - two custom daisyUI themes (`ledger`, `ledger-dark`) carrying the tokens above, `--radius-*: 0`, `--depth: 0`; utilities for `.figure` (tabular mono) and `.rule`.
+3. `theme.js` - map preference → `data-theme` = `ledger` / `ledger-dark`; `system` removes the attribute and lets `--prefersdark` choose.
+4. `App.jsx` - masthead: wordmark in Plex Sans 600, underlined nav, no gradient.
+5. `PunchClock.jsx` (new) - the hero: clock, context, start/stop, and the week strip.
+6. `WeekStrip.jsx` (new) - last 7 days as a ruled tally, from bootstrap entries.
+7. `EntryForm.jsx` (was `TrackerBar`) - one form line with rules between fields.
+8. `Ledger.jsx` (was `EntriesTable`) - ruled rows, right-aligned figures, double-rule totals; filters move into the ledger header.
+9. `SettingsPage` / `ManagePanel` - form sheet, ruled lists.
+10. `print.css` - rules and columns survive; drop the daisyUI colour overrides that are no longer needed.
 
 ## 6. Verify
 

@@ -1,4 +1,4 @@
-# Print/PDF Enhancements — CS Time Tracker
+# Print/PDF Enhancements - CS Time Tracker
 
 **Date:** 2026-09-20  
 **Scope:** Professional print/PDF output with header, summary, multi-page flow, and mobile responsiveness.
@@ -33,7 +33,7 @@ The print functionality has been completely redesigned to produce professional, 
 - **Styling**: Alternating row colors, proper borders, monospace numbers
 
 ### Footer
-- **Content**: "CS Time Tracker — Generated on [date] — [entries] entries, [hours] hours"
+- **Content**: "CS Time Tracker - Generated on [date] - [entries] entries, [hours] hours"
 - **Styling**: Small gray text with top border
 
 ## 3. Mobile Responsiveness
@@ -53,8 +53,8 @@ The print functionality has been completely redesigned to produce professional, 
 ## 4. Implementation Details
 
 ### Files Modified
-1. **`web/src/print.css`** — Complete redesign with professional layout
-2. **`web/src/components/Ledger.jsx`** — Added summary table and print header/footer
+1. **`web/src/print.css`** - Complete redesign with professional layout
+2. **`web/src/components/Ledger.jsx`** - Added summary table and print header/footer
 
 ### Key Components
 

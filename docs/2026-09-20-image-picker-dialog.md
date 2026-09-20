@@ -17,17 +17,17 @@
   - a **drag & drop** zone that highlights while an image is dragged over it;
   - **clipboard paste**, accepted anywhere while the dialog is open (document-level listener, so the paste target does not matter);
   - a dedicated **Choose a file** upload button;
-  - a live preview with "New image — not saved until you confirm" and a **Use this image** confirmation step;
+  - a live preview with "New image - not saved until you confirm" and a **Use this image** confirmation step;
   - **Remove image** for records that already have one;
   - Cancel, backdrop click, and Esc all close without applying.
 - Chosen/dropped/pasted images are still processed locally: resized to ≤256×256, compressed to JPEG, rejected above the 180 KB data-URL bound, and stored as a base64 data URL in D1. The Worker validation contract is unchanged.
 
 ## Implementation
 
-- `web/src/components/ImagePicker.jsx` — rebuilt as avatar trigger + native `<dialog class="modal">` (daisyUI 5 modal). Exported behavior: drag-drop, paste (document-level while open), file input, pending preview → confirm, remove, busy ("Resizing…") and error states with recovery copy. Keyboard: focus-visible shows the overlay; Esc closes; the trigger is a real button with `aria-haspopup="dialog"`.
-- `web/src/components/IdentityMark.jsx` — extracted `initialsOf(name)` so the picker placeholder and the read-only identity marks share one initials rule.
-- `web/src/components/Icon.jsx` — added the `edit` (pencil) stroke icon to the shared icon language.
-- `web/src/components/ManagePanel.jsx` — every client/project/activity row and the three create forms now place the picker beside the name input; the separate image sections and buttons are gone. `IdentityMark` remains in use only on read-only surfaces (dashboard ranking rows, detail pages).
+- `web/src/components/ImagePicker.jsx` - rebuilt as avatar trigger + native `<dialog class="modal">` (daisyUI 5 modal). Exported behavior: drag-drop, paste (document-level while open), file input, pending preview → confirm, remove, busy ("Resizing…") and error states with recovery copy. Keyboard: focus-visible shows the overlay; Esc closes; the trigger is a real button with `aria-haspopup="dialog"`.
+- `web/src/components/IdentityMark.jsx` - extracted `initialsOf(name)` so the picker placeholder and the read-only identity marks share one initials rule.
+- `web/src/components/Icon.jsx` - added the `edit` (pencil) stroke icon to the shared icon language.
+- `web/src/components/ManagePanel.jsx` - every client/project/activity row and the three create forms now place the picker beside the name input; the separate image sections and buttons are gone. `IdentityMark` remains in use only on read-only surfaces (dashboard ranking rows, detail pages).
 
 ## Deliberate non-changes
 
@@ -37,5 +37,5 @@
 
 ## Verification
 
-- `cd web && npm run build` — clean (61 modules transformed).
+- `cd web && npm run build` - clean (61 modules transformed).
 - Usage audit: `ImagePicker` is now referenced only from the Settings manage panel (six placements); `IdentityMark` remains on the four read-only surfaces.

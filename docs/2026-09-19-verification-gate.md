@@ -1,4 +1,4 @@
-# Verification Gate — cf-timetracker
+# Verification Gate - cf-timetracker
 
 **Date:** 2026-09-19
 
@@ -10,9 +10,9 @@ npm run verify
 
 It runs, in order:
 
-1. `cd worker && npm test` — unit tests, including the D1 unique-constraint race path and concurrent-stop behavior.
-2. `cd web && npm run build` — production frontend build.
-3. `node scripts/check-single-timer.mjs <api> 20` — live concurrent start/stop requests, asserting one successful start, `timer_running` conflicts for the losers, one successful stop, and `no_active_timer` for the losing stops.
+1. `cd worker && npm test` - unit tests, including the D1 unique-constraint race path and concurrent-stop behavior.
+2. `cd web && npm run build` - production frontend build.
+3. `node scripts/check-single-timer.mjs <api> 20` - live concurrent start/stop requests, asserting one successful start, `timer_running` conflicts for the losers, one successful stop, and `no_active_timer` for the losing stops.
 
 ## Prerequisites
 

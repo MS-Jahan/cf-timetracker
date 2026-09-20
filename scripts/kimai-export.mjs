@@ -3,10 +3,10 @@
  * Export all closed time entries from cf-timetracker into a Kimai 2 instance.
  *
  * Creates any missing Kimai customers, projects, and activities (matched by
- * name — never duplicated), then posts each closed entry as a Kimai timesheet
+ * name - never duplicated), then posts each closed entry as a Kimai timesheet
  * record with hourlyRate = the entry's applied rate, so Kimai computes the
  * same cost. Running entries are skipped (Kimai has no running-timer concept
- * to import into). Re-running is safe for master data; timesheets re-post —
+ * to import into). Re-running is safe for master data; timesheets re-post -
  * run once, or pass DRY_RUN=1 first.
  *
  * Environment:
@@ -88,7 +88,7 @@ for (const e of closed) {
 }
 
 if (dry) {
-  console.log("\nDRY RUN — would create in Kimai if missing (matched by name):");
+  console.log("\nDRY RUN - would create in Kimai if missing (matched by name):");
   for (const id of usedCustomers) console.log(`  customer:  ${customerByKey.get(id)?.name}`);
   for (const id of usedProjects) { const p = projectByKey.get(id); console.log(`  project:   ${p?.name} (${customerByKey.get(p?.customer_id)?.name})`); }
   for (const id of usedActivities) console.log(`  activity:  ${activityByKey.get(id)?.name}`);

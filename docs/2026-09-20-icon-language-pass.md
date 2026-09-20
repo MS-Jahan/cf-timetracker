@@ -20,7 +20,7 @@ The interface already uses strong typography, rules, and restrained color. Sever
 - Use one small, stroke-based inline SVG component; no new dependency.
 - Icons are visual reinforcement, not the only label. Text remains visible on primary actions.
 - Use `aria-hidden="true"` for decorative icons and `aria-label` where an icon-only button exists.
-- Keep icons at 16–18px, aligned with text, with no emoji substitution for controls.
+- Keep icons at 16-18px, aligned with text, with no emoji substitution for controls.
 - Preserve the current palette: primary ink for navigation/actions, accent red for running/destructive states, info for help/connection.
 - Do not put icons in every table cell or decorative heading; use them where they improve recognition or status scanning.
 - Respect reduced-motion and existing focus-visible styling.
@@ -57,7 +57,7 @@ Implemented the icon pass with one dependency-free inline SVG component: `web/sr
 
 ### Consistency decisions
 
-- Icons are stroke-only, 16–17px, current-color, and remain paired with text.
+- Icons are stroke-only, 16-17px, current-color, and remain paired with text.
 - No external icon dependency or CDN was introduced.
 - The existing ink/accent/status palette remains unchanged.
 - Icon-only controls were avoided for primary actions; labels remain visible for clarity and accessibility.

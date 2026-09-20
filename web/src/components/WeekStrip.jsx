@@ -67,7 +67,7 @@ export default function WeekStrip({ entries, activeDay, onPickDay }) {
                   />
                 </span>
                 <span className={`figure w-full text-center text-xs ${picked ? "font-semibold" : "ink-muted"}`}>
-                  {seconds > 0 ? toHours(seconds) : "—"}
+                  {seconds > 0 ? toHours(seconds) : "-"}
                 </span>
                 <span
                   className={`ink-muted w-full pt-1 text-center text-xs ${

@@ -7,7 +7,7 @@
 * **Real-World Analogy (Travel Options)**:
   * Traveling from Dhaka to Chattogram/Sylhet/Rajshahi.
   * **Goal**: Reaching the destination.
-  * **Experience**: How you get there (Bus takes 5–6 hours with hassle; Train takes 3–4 hours; Air flight takes 1–2 hours with comfort and low friction).
+  * **Experience**: How you get there (Bus takes 5-6 hours with hassle; Train takes 3-4 hours; Air flight takes 1-2 hours with comfort and low friction).
   * The tasks and journey a user goes through to achieve their goal define the *User Experience*.
 * **Digital Flow Example (Daraz)**:
   * Adding an item to the cart $\rightarrow$ Proceeding to checkout $\rightarrow$ Payment completion.
@@ -51,7 +51,7 @@
 1. **Unusable Kettle / Pitcher Concept**: A handle placed in a position where pouring hot water spills directly onto the user's hand or body.
 2. **Elevator & Signage Confusion**:
    * Ambiguous directional arrows (e.g., confusing up/down white spaces).
-   * Room numbers (e.g., room 201–216 vs. 217–226) where conflicting wall arrows point users in the wrong direction.
+   * Room numbers (e.g., room 201-216 vs. 217-226) where conflicting wall arrows point users in the wrong direction.
    * Vertical elevator buttons (1, 2, 3, 4) grouped without proper spacing or visual hierarchy, leaving users unsure which number corresponds to which button.
 3. **The "Norman Door" Problem (Don Norman)**:
    * Doors that have identical pull handles on both sides. A user instinctively pulls a door meant to be pushed. Doors must have distinct visual affordances (a flat plate to push, a handle to pull).
@@ -59,7 +59,7 @@
 ### Digital Bad UX:
 1. **Equal Priority Action Buttons (Login Screens)**:
    * **Bad UX**: Making "Login", "Sign Up", and "Forgot Password" look identical with the same visual weight.
-   * **Good UX**: Clear visual hierarchy—Primary button (**Log In**), Secondary action (**Sign Up**), and Tertiary link (**Forgot Password**).
+   * **Good UX**: Clear visual hierarchy-Primary button (**Log In**), Secondary action (**Sign Up**), and Tertiary link (**Forgot Password**).
 2. **Poor Contrast & Ambiguous Actions**:
    * Profile/Contact screens where phone numbers lack clear action indicators (is clicking the number going to call, or is it an edit field?).
    * Low color contrast making details unreadable.
@@ -128,7 +128,7 @@ Used to benchmark product value across 7 facets:
 ---
 
 # 10. Design Tools & History
-* **Evolution**: Photoshop $\rightarrow$ Sketch (macOS exclusive, dominant around 2015–2020) & Adobe XD (now largely discontinued) $\rightarrow$ **Figma** (industry standard for UI, wireframing, and interactive prototyping) $\rightarrow$ New rising competitors like **Paper**.
+* **Evolution**: Photoshop $\rightarrow$ Sketch (macOS exclusive, dominant around 2015-2020) & Adobe XD (now largely discontinued) $\rightarrow$ **Figma** (industry standard for UI, wireframing, and interactive prototyping) $\rightarrow$ New rising competitors like **Paper**.
 
 ---
 
@@ -143,7 +143,7 @@ Used to benchmark product value across 7 facets:
 ---
 
 # 12. Design Systems vs. Style Guides & Dev Handoff
-* **Style Guide**: A high-level visual guideline (color palette, typography ramp from H1–H6, body copy).
+* **Style Guide**: A high-level visual guideline (color palette, typography ramp from H1-H6, body copy).
 * **Component Library**: UI elements built in isolation (buttons, inputs, cards).
 * **Design System**: A holistic ecosystem combining design guidelines, production components, and **Design Tokens** (standardized naming for variables like colors, spacing, font sizes) that map 1:1 with developer codebases and maintain dynamic component states (*Default*, *Hover*, *Active*, *Disabled*).
 

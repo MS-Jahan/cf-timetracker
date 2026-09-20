@@ -129,7 +129,7 @@ export default function App() {
     return <SplashScreen onDone={handleSplashDone} />;
   }
 
-  // The print view renders bare — no sidebar, timer bar, or banner — so the
+  // The print view renders bare - no sidebar, timer bar, or banner - so the
   // print dialog only ever sees the timesheet.
   if (path === "/print") {
     return <PrintPage />;
@@ -171,7 +171,10 @@ export default function App() {
 
       <main className="mx-auto flex min-h-dvh w-full max-w-[120rem] flex-col border-x border-base-300 bg-base-100 lg:flex-row">
       <aside className="no-print border-b border-base-300 px-5 py-5 lg:sticky lg:top-0 lg:flex lg:h-dvh lg:w-56 lg:shrink-0 lg:flex-col lg:border-b-0 lg:border-r lg:px-4 lg:py-8">
-        <Link to="/" className="text-lg font-semibold tracking-tight">Timetracker</Link>
+        <Link to="/" className="flex items-center gap-2.5 text-lg font-semibold tracking-tight">
+          <img src="/logo-mark.png" alt="" className="h-7 w-7" />
+          Timetracker
+        </Link>
         <p className="ink-muted mt-1 text-sm">Billable hours, clearly kept.</p>
 
         <nav className="mt-6 flex flex-wrap gap-2 lg:mt-12 lg:flex-col" aria-label="Main navigation">

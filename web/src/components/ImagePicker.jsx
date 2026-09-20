@@ -133,7 +133,7 @@ export default function ImagePicker({ value = "", name = "", emoji = "", label =
         className="group relative inline-flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-base-200 text-sm font-semibold text-base-content ring-accent transition-shadow hover:ring-2 focus-visible:outline-none focus-visible:ring-2"
         aria-haspopup="dialog"
         aria-label={dialogTitle}
-        title={`${dialogTitle} — drag & drop, paste, or upload`}
+        title={`${dialogTitle} - drag & drop, paste, or upload`}
         onClick={openDialog}
       >
         <Preview dataUrl={value} emoji={emoji} initials={initials} size="size-full" />
@@ -162,7 +162,7 @@ export default function ImagePicker({ value = "", name = "", emoji = "", label =
 
           <div className={`mt-4 flex flex-col items-center gap-3 rounded-box border-2 border-dashed p-5 text-center transition-colors ${dragOver ? "border-accent bg-accent/5" : "border-base-300"}`}>
             <Preview dataUrl={pending || value} emoji={emoji} initials={initials} size="size-16 text-xl" />
-            {pending ? <p className="text-xs ink-muted">New image — not saved until you confirm.</p> : null}
+            {pending ? <p className="text-xs ink-muted">New image - not saved until you confirm.</p> : null}
             {busy ? <p className="text-sm ink-muted" role="status">Resizing…</p> : null}
             {error ? <p className="text-sm text-accent" role="alert">{error} Try another image.</p> : null}
 
