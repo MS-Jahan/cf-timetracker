@@ -1,0 +1,26 @@
+name: timetracker
+description: Shared desktop and mobile client for cf-timetracker.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.9.0
+  flutter: '>=3.35.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.5.0
+  shared_preferences: ^2.5.3
+  url_launcher: ^6.3.2
+  record: ^6.1.2
+  tray_manager: ^0.5.1
+  window_manager: ^0.5.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
