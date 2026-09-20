@@ -56,6 +56,30 @@
     print-color-adjust: exact;
   }
 
+  /* Tables span the paper: no min-width, no horizontal scrollbar. */
+  table {
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+
+  .overflow-x-auto {
+    overflow: visible !important;
+  }
+
+  /* The grand total prints once, at the very end — tfoot as a normal row
+     group stops browsers repeating it at the bottom of every page. */
+  tfoot {
+    display: table-row-group;
+  }
+
+  /* Amounts keep their full "BDT 250.00" text instead of wrapping. */
+  .print-entries-table td.text-right,
+  .print-entries-table th.text-right,
+  .print-summary td.text-right,
+  .print-summary th.text-right {
+    white-space: nowrap;
+  }
+
   /* Hide all interactive chrome */
   .no-print,
   nav,
@@ -204,8 +228,22 @@
 
   table.print-entries-table tfoot td {
     border-top: 2px solid #000;
+    border-bottom: none;
     font-weight: 700;
     padding-top: 2mm;
+    color: #000 !important;
+  }
+
+  .print-summary tfoot td {
+    border-top: 2px solid #000;
+    border-bottom: none;
+    font-weight: 700;
+  }
+
+  /* No double rule between the last entry and the total row. */
+  .print-entries-table tbody tr:last-child td,
+  .print-summary tbody tr:last-child td {
+    border-bottom: none;
   }
 
   /* Column widths for print */
@@ -227,7 +265,6 @@
     right: 0;
     display: block !important;
     padding-top: 3mm;
-    border-top: 1px solid #ccc;
     font-size: 8pt;
     color: #666;
     text-align: center;

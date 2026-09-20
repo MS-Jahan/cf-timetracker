@@ -78,12 +78,12 @@ export default function Ledger({ entries, scopeLabel, onEdit, emptyMessage }) {
 
   return (
     <section>
-      {/* Print-only header: CS Time Tracker branding + period info */}
+      {/* Print-only header: CF Time Tracker branding + period info */}
       <header className="print-header">
         <div style={{ display: "flex", alignItems: "center", gap: "4mm" }}>
           <div className="print-logo">LOGO</div>
           <div>
-            <h1>CS Time Tracker</h1>
+            <h1>CF Time Tracker</h1>
             <p className="print-meta">
               Billable hours report{mixedCurrencies ? " (mixed currencies)" : ""}
             </p>
@@ -227,7 +227,7 @@ export default function Ledger({ entries, scopeLabel, onEdit, emptyMessage }) {
 
       {/* Print-only footer */}
       <div className="print-footer">
-        CS Time Tracker — Timesheet printed on {generatedDate} — {closed.length} entries, {toHours(totalSeconds)} hours
+        CF Time Tracker — Timesheet printed on {generatedDate} — {closed.length} entries, {toHours(totalSeconds)} hours
       </div>
     </section>
   );
