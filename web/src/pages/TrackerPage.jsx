@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import EntryEditor from "../components/EntryEditor.jsx";
 import EntryForm from "../components/EntryForm.jsx";
 import Ledger from "../components/Ledger.jsx";
-import { API_BASE, fetchAllEntries, startTimer, stopTimer, updateTimeEntry } from "../lib/api.js";
-import { buildCsv, downloadCsv, utcMonth } from "../lib/format.js";
+import { API_BASE, createTimeEntry, deleteTimeEntry, fetchAllEntries, startTimer, stopTimer, updateTimeEntry } from "../lib/api.js";
+import { buildCsv, downloadCsv, formatDuration, utcMonth } from "../lib/format.js";
 import { Link, navigate } from "../lib/router.jsx";
 import Icon from "../components/Icon.jsx";
 
@@ -34,6 +35,7 @@ export default function TrackerPage({ tracker }) {
   const [clientFilter, setClientFilter] = useState("all");
   const [projectFilter, setProjectFilter] = useState("all");
   const [editingEntry, setEditingEntry] = useState(null);
+  const [deletingEntry, setDeletingEntry] = useState(null);
   // Bootstrap only carries the last 50 entries, so the ledger fetches the full
   // history itself; `entries` is the instant first paint, `history` the truth.
   const [history, setHistory] = useState(null);
@@ -78,6 +80,33 @@ export default function TrackerPage({ tracker }) {
       },
       "Continued this task — the timer is running."
     );
+
+  /** Instant closed copy of a ledger row: same masters, note, tags, rate, and times. */
+  const handleDuplicate = (entry) =>
+    runAction(
+      () =>
+        createTimeEntry({
+          customerId: entry.customer_id,
+          projectId: entry.project_id,
+          activityId: entry.activity_id,
+          description: entry.description || "",
+          tags: entry.tags || "",
+          startTime: entry.start_time,
+          endTime: entry.end_time,
+          hourlyRate: entry.rate_applied,
+        }),
+      "Entry duplicated."
+    );
+
+  const saveEntry = async (patch) => {
+    const result = await runAction(() => updateTimeEntry(editingEntry.id, patch), editingEntry.is_running && patch.endTime === undefined ? "Running entry updated." : "Entry updated.");
+    if (result.ok) setEditingEntry(null);
+  };
+
+  const confirmDelete = async () => {
+    const result = await runAction(() => deleteTimeEntry(deletingEntry.id), "Entry deleted.");
+    if (result.ok) setDeletingEntry(null);
+  };
 
   const ledgerEntries = history ?? entries;
   const periods = useMemo(() => [...new Set(ledgerEntries.map((e) => utcMonth(e.start_time)))].sort().reverse(), [ledgerEntries]);
@@ -128,11 +157,6 @@ export default function TrackerPage({ tracker }) {
     setPeriod("all");
     setClientFilter("all");
     setProjectFilter("all");
-  };
-
-  const saveEntry = async (patch) => {
-    const result = await runAction(() => updateTimeEntry(editingEntry.id, patch), "Entry updated.");
-    if (result.ok) setEditingEntry(null);
   };
 
   return (
@@ -277,6 +301,8 @@ export default function TrackerPage({ tracker }) {
           scopeLabel={period === "all" ? "" : period}
           onEdit={setEditingEntry}
           onContinue={handleContinue}
+          onDuplicate={handleDuplicate}
+          onDelete={setDeletingEntry}
           canContinue={!activeTimer}
           emptyMessage={hasFilters ? "No entries match these filters. Clear them or choose a wider period." : undefined}
         />
@@ -293,6 +319,20 @@ export default function TrackerPage({ tracker }) {
           onSave={saveEntry}
         />
       ) : null}
+
+      <ConfirmDialog
+        open={Boolean(deletingEntry)}
+        title="Delete this entry?"
+        message={
+          deletingEntry
+            ? `${deletingEntry.customer_name || "-"} · ${deletingEntry.project_name || "-"} · ${deletingEntry.activity_name || "-"} (${formatDuration(deletingEntry.duration_seconds)}). This permanently removes the entry and cannot be undone.`
+            : ""
+        }
+        confirmLabel="Delete entry"
+        busy={busy}
+        onCancel={() => setDeletingEntry(null)}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 }

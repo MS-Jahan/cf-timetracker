@@ -104,6 +104,13 @@ export const updateTimeEntry = (id, payload) =>
     body: JSON.stringify(payload),
   });
 
+/** Closed-entry create (duplicate, import follow-ups). Timer starts go through startTimer. */
+export const createTimeEntry = (payload) =>
+  request("/api/entries", { method: "POST", body: JSON.stringify(payload) });
+
+export const deleteTimeEntry = (id) =>
+  request(`/api/entries/${encodeURIComponent(id)}`, { method: "DELETE" });
+
 /** Paginated history in a half-open [fromMs, toMs) range (both optional). */
 export const listEntries = ({ fromMs, toMs, limit = 50, offset = 0 } = {}) => {
   const params = new URLSearchParams({ limit, offset });

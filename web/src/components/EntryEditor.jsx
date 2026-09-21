@@ -10,7 +10,8 @@ function draftFrom(entry) {
     description: entry.description || "",
     tags: entry.tags || "",
     startTime: formatDateTimeLocal(entry.start_time),
-    endTime: formatDateTimeLocal(entry.end_time || entry.start_time + 3600000),
+    // A running entry has no end yet; an empty field means "keep recording".
+    endTime: entry.is_running ? "" : formatDateTimeLocal(entry.end_time || entry.start_time + 3600000),
     hourlyRate: String(entry.rate_applied ?? 0),
   };
 }
@@ -32,27 +33,33 @@ export default function EntryEditor({ entry, customers, projects, activities, bu
     }
   }, [customerProjects, draft.projectId]);
 
+  const running = Boolean(entry.is_running);
   const startMs = parseDateTimeLocal(draft.startTime);
   const endMs = parseDateTimeLocal(draft.endTime);
+  const keepsRunning = running && draft.endTime === "";
   const previewSeconds = Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs
     ? Math.max(1, Math.round((endMs - startMs) / 1000))
     : 0;
   const currency = customers.find((c) => c.id === draft.customerId)?.currency || "USD";
   const symbol = currencySymbol(currency);
+  const basicsOk = draft.customerId && draft.projectId && draft.activityId && Number.isFinite(startMs);
+  const canSave = keepsRunning ? Boolean(basicsOk) : basicsOk && previewSeconds > 0;
 
   const set = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
 
   const save = () => {
-    onSave({
+    const patch = {
       customerId: draft.customerId,
       projectId: draft.projectId,
       activityId: draft.activityId,
       description: draft.description,
       tags: draft.tags,
       startTime: startMs,
-      endTime: endMs,
       hourlyRate: Number(draft.hourlyRate),
-    });
+    };
+    // Blank end on a running entry keeps the clock running; a filled one stops it.
+    if (!keepsRunning) patch.endTime = endMs;
+    onSave(patch);
   };
 
   return (
@@ -65,9 +72,15 @@ export default function EntryEditor({ entry, customers, projects, activities, bu
       >
         <header className="flex items-start justify-between gap-6 border-b border-base-300 pb-4">
           <div>
-            <p className="field-label">Edit closed entry</p>
-            <h2 id="entry-editor-title" className="text-xl font-semibold">Change the recorded work</h2>
-            <p className="ink-muted mt-1 text-sm">The duration and amount recalculate from the times and rate.</p>
+            <p className="field-label">{running ? "Edit running entry" : "Edit closed entry"}</p>
+            <h2 id="entry-editor-title" className="text-xl font-semibold">
+              {running ? "Change the work in progress" : "Change the recorded work"}
+            </h2>
+            <p className="ink-muted mt-1 text-sm">
+              {running
+                ? "The clock keeps running. Fill in an end time to stop it and record the duration."
+                : "The duration and amount recalculate from the times and rate."}
+            </p>
           </div>
           <button className="btn btn-ghost btn-sm" type="button" onClick={onClose} aria-label="Close editor">
             Close
@@ -110,8 +123,14 @@ export default function EntryEditor({ entry, customers, projects, activities, bu
 
           <label className="field-label">
             Ended
-            <input className="input figure mt-1 w-full" type="datetime-local" value={draft.endTime}
-              onChange={(event) => set("endTime", event.target.value)} />
+            <input
+              className="input figure mt-1 w-full"
+              type="datetime-local"
+              value={draft.endTime}
+              placeholder={running ? "Still recording" : undefined}
+              onChange={(event) => set("endTime", event.target.value)}
+            />
+            {running ? <span className="ink-muted mt-1 block text-xs font-normal normal-case">Leave empty to keep recording; fill in to stop the timer.</span> : null}
           </label>
 
           <label className="field-label sm:col-span-2">
@@ -129,18 +148,23 @@ export default function EntryEditor({ entry, customers, projects, activities, bu
 
         <footer className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-base-300 pt-5">
           <p className="ink-muted text-sm">
-            New duration: <span className="figure font-medium text-base-content">{formatDuration(previewSeconds)}</span>
-            {previewSeconds ? (
+            {keepsRunning ? (
+              "Still recording."
+            ) : (
               <>
-                {" · New amount:"} <span className="figure font-medium text-base-content">{formatMoney((previewSeconds / 3600) * Number(draft.hourlyRate || 0), currency)}</span>
+                New duration: <span className="figure font-medium text-base-content">{formatDuration(previewSeconds)}</span>
+                {previewSeconds ? (
+                  <>
+                    {" · New amount:"} <span className="figure font-medium text-base-content">{formatMoney((previewSeconds / 3600) * Number(draft.hourlyRate || 0), currency)}</span>
+                  </>
+                ) : null}
               </>
-            ) : null}
+            )}
           </p>
           <div className="flex gap-2">
             <button className="btn btn-ghost" type="button" onClick={onClose}>Cancel</button>
-            <button className="btn btn-primary" type="button" disabled={busy || !previewSeconds || !draft.customerId || !draft.projectId || !draft.activityId}
-              onClick={save}>
-              Save entry
+            <button className="btn btn-primary" type="button" disabled={busy || !canSave} onClick={save}>
+              {keepsRunning ? "Save changes" : running ? "Save & stop timer" : "Save entry"}
             </button>
           </div>
         </footer>

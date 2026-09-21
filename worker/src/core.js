@@ -1106,13 +1106,20 @@ export async function createTimeEntry(env, body = {}) {
   return { status: "ok", entry };
 }
 
+/**
+ * Update an entry. Closed entries take the full patch (times, masters, rate) and
+ * recompute duration/cost. A running entry is also editable in place: without
+ * `endTime` the patch only changes masters/note/tags/start/rate and the clock keeps
+ * running; with `endTime` it acts as a manual stop - is_running flips to 0 and
+ * duration/cost are written in the same guarded UPDATE (`WHERE ... AND is_running = 1`
+ * plus a changes check), so two concurrent stop-edits cannot both succeed.
+ */
 export async function updateTimeEntry(env, id, patch = {}) {
   const unknown = Object.keys(patch).filter((key) => !ENTRY_FIELDS.has(key));
   if (unknown.length) return { status: "invalid", error: `Unknown fields: ${unknown.join(", ")}` };
 
   const current = await env.DB.prepare("SELECT * FROM time_entries WHERE id = ?").bind(id).first();
   if (!current) return { status: "not_found", error: "Time entry not found" };
-  if (current.is_running) return { status: "conflict", error: "Stop the timer before editing this entry" };
   if (!Object.keys(patch).length) return { status: "invalid", error: "No updatable fields provided" };
 
   const customerId = patch.customerId ?? current.customer_id;
@@ -1143,21 +1150,65 @@ export async function updateTimeEntry(env, id, patch = {}) {
     return { status: "invalid", error: "projectId does not belong to customerId" };
   }
 
-  const startTime = asTimestamp(patch.startTime ?? current.start_time);
-  const endTime = asTimestamp(patch.endTime ?? current.end_time);
-  if (!Number.isFinite(startTime) || !Number.isFinite(endTime)) {
-    return { status: "invalid", error: "startTime and endTime must be timestamps in milliseconds" };
-  }
-  if (endTime <= startTime) return { status: "invalid", error: "endTime must be after startTime" };
-
   const rate = patch.hourlyRate === undefined ? Number(current.rate_applied || 0) : asRate(patch.hourlyRate);
   const rateError = badRate(rate);
   if (rateError) return { status: "invalid", error: `hourlyRate ${rateError}` };
 
-  const durationSeconds = Math.max(1, Math.round((endTime - startTime) / 1000));
-  const cost = (durationSeconds / 3600) * rate;
+  const startTime = asTimestamp(patch.startTime ?? current.start_time);
+  if (!Number.isFinite(startTime)) {
+    return { status: "invalid", error: "startTime must be a timestamp in milliseconds" };
+  }
   const description = patch.description === undefined ? current.description || "" : String(patch.description ?? "");
   const tags = patch.tags === undefined ? current.tags || "" : String(patch.tags ?? "");
+
+  if (current.is_running) {
+    if (patch.endTime !== undefined && patch.endTime !== null && patch.endTime !== "") {
+      const endTime = asTimestamp(patch.endTime);
+      if (!Number.isFinite(endTime)) {
+        return { status: "invalid", error: "endTime must be a timestamp in milliseconds" };
+      }
+      if (endTime <= startTime) return { status: "invalid", error: "endTime must be after startTime" };
+
+      const durationSeconds = Math.max(1, Math.round((endTime - startTime) / 1000));
+      const cost = (durationSeconds / 3600) * rate;
+      const { meta } = await env.DB.prepare(`
+        UPDATE time_entries
+        SET customer_id = ?, project_id = ?, activity_id = ?, description = ?, tags = ?,
+            start_time = ?, end_time = ?, duration_seconds = ?, rate_applied = ?, cost = ?, is_running = 0
+        WHERE id = ? AND is_running = 1
+      `)
+        .bind(customerId, projectId, activityId, description, tags, startTime, endTime, durationSeconds, rate, cost, id)
+        .run();
+      if (!meta?.changes) {
+        return { status: "conflict", error: "The timer was already stopped; reload and try again" };
+      }
+    } else {
+      const { meta } = await env.DB.prepare(`
+        UPDATE time_entries
+        SET customer_id = ?, project_id = ?, activity_id = ?, description = ?, tags = ?,
+            start_time = ?, rate_applied = ?
+        WHERE id = ? AND is_running = 1
+      `)
+        .bind(customerId, projectId, activityId, description, tags, startTime, rate, id)
+        .run();
+      if (!meta?.changes) {
+        return { status: "conflict", error: "The timer was already stopped; reload and try again" };
+      }
+    }
+    return {
+      status: "ok",
+      entry: await env.DB.prepare("SELECT * FROM time_entries WHERE id = ?").bind(id).first(),
+    };
+  }
+
+  const endTime = asTimestamp(patch.endTime ?? current.end_time);
+  if (!Number.isFinite(endTime)) {
+    return { status: "invalid", error: "endTime must be a timestamp in milliseconds" };
+  }
+  if (endTime <= startTime) return { status: "invalid", error: "endTime must be after startTime" };
+
+  const durationSeconds = Math.max(1, Math.round((endTime - startTime) / 1000));
+  const cost = (durationSeconds / 3600) * rate;
 
   await env.DB.prepare(`
     UPDATE time_entries
@@ -1172,6 +1223,16 @@ export async function updateTimeEntry(env, id, patch = {}) {
     status: "ok",
     entry: await env.DB.prepare("SELECT * FROM time_entries WHERE id = ?").bind(id).first(),
   };
+}
+
+/** Hard-delete a closed entry. The running row is the live timer and must be stopped first. */
+export async function deleteTimeEntry(env, id) {
+  const current = await env.DB.prepare("SELECT is_running FROM time_entries WHERE id = ?").bind(id).first();
+  if (!current) return { status: "not_found", error: "Time entry not found" };
+  if (current.is_running) return { status: "conflict", error: "Stop the timer before deleting this entry" };
+
+  await env.DB.prepare("DELETE FROM time_entries WHERE id = ? AND is_running = 0").bind(id).run();
+  return { status: "ok" };
 }
 
 /* ------------------------------------------------------------------ imports */

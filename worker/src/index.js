@@ -26,6 +26,7 @@ import {
   updateCustomer,
   updateProject,
   createTimeEntry,
+  deleteTimeEntry,
   importCsvBatch,
   updateTimeEntry,
   setArchived,
@@ -331,6 +332,13 @@ export default {
           return jsonResponse(request, env, { error: result.error }, STATUS_CODES[result.status] || 400);
         }
         return jsonResponse(request, env, { success: true, entry: result.entry });
+      }
+      if (method === "DELETE" && entryMatch?.id) {
+        const result = await deleteTimeEntry(env, entryMatch.id);
+        if (result.status !== "ok") {
+          return jsonResponse(request, env, { error: result.error }, STATUS_CODES[result.status] || 404);
+        }
+        return jsonResponse(request, env, { success: true });
       }
 
       // 9. Client detail - profile, projects, and paginated time history.

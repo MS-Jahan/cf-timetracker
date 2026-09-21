@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { formatDuration, formatMoney, toHours, utcDate } from "../lib/format.js";
 import Icon from "./Icon.jsx";
 import { Link } from "../lib/router.jsx";
@@ -53,6 +54,98 @@ function TagList({ value }) {
 }
 
 /**
+ * The row's three-dot menu. Position: fixed so the table's overflow-x-auto cannot
+ * clip it (same treatment as the emoji picker); closes on outside click, Escape,
+ * scroll, or picking an item.
+ */
+function RowMenu({ entry, actions }) {
+  const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState(null);
+  const buttonRef = useRef(null);
+  const panelRef = useRef(null);
+
+  const place = () => {
+    const rect = buttonRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const width = 160;
+    const height = actions.length * 36 + 8;
+    const left = Math.min(Math.max(8, rect.right - width), window.innerWidth - width - 8);
+    const top = rect.bottom + 4;
+    setCoords({
+      left,
+      top: top + height > window.innerHeight ? Math.max(8, rect.top - height - 4) : top,
+    });
+  };
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDocClick = (event) => {
+      if (panelRef.current?.contains(event.target) || buttonRef.current?.contains(event.target)) return;
+      setOpen(false);
+    };
+    const onKey = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    const onReposition = () => place();
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", onReposition, true);
+    window.addEventListener("resize", onReposition);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", onReposition, true);
+      window.removeEventListener("resize", onReposition);
+    };
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        className="btn btn-ghost btn-xs btn-square"
+        aria-label="Row actions"
+        aria-expanded={open}
+        title="Row actions"
+        onClick={() => {
+          if (!open) place();
+          setOpen((v) => !v);
+        }}
+      >
+        <Icon name="kebab" size={16} />
+      </button>
+      {open && coords ? (
+        <div
+          ref={panelRef}
+          className="fixed z-[70] w-40 border border-base-300 bg-base-100 py-1 shadow-xl"
+          style={{ left: coords.left, top: coords.top }}
+          role="menu"
+          aria-label="Row actions"
+        >
+          {actions.map((action) => (
+            <button
+              key={action.label}
+              type="button"
+              role="menuitem"
+              className={`block w-full px-3 py-1.5 text-left text-sm hover:bg-base-200 ${
+                action.danger ? "text-error" : ""
+              }`}
+              onClick={() => {
+                setOpen(false);
+                action.run();
+              }}
+            >
+              {action.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+/**
  * The centre of gravity: a timesheet, ruled. Rules separate rows instead of cards,
  * every figure is right-aligned in mono so a wrong one is visible at a glance, and the
  * period closes with the double rule an accountant would draw under a sum. The amount
@@ -60,8 +153,10 @@ function TagList({ value }) {
  *
  * `onContinue` opts the ledger into the hover play button that restarts a closed
  * entry as a running timer; `canContinue` gates it while a timer is already running.
+ * `onEdit`/`onDuplicate`/`onContinue`/`onDelete` feed the row's three-dot menu -
+ * handlers left out simply drop their menu item, so detail pages can opt in per action.
  */
-export default function Ledger({ entries, scopeLabel, onEdit, onContinue, canContinue = true, emptyMessage }) {
+export default function Ledger({ entries, scopeLabel, onEdit, onContinue, onDuplicate, onDelete, canContinue = true, emptyMessage }) {
   const closed = entries.filter((e) => !e.is_running);
   const totalSeconds = closed.reduce((sum, e) => sum + (e.duration_seconds || 0), 0);
   const totalCost = closed.reduce((sum, e) => sum + Number(e.cost || 0), 0);
@@ -179,13 +274,13 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, canCon
                     e.is_running ? "text-accent" : "hover:bg-base-200/70"
                   }`}
                 >
-                  <td className="figure ink-muted relative text-left">
+                  <td className="figure ink-muted text-left">
                     {onContinue && !e.is_running && e.customer_id && e.project_id && e.activity_id ? (
                       <button
                         type="button"
-                        className={`btn btn-ghost btn-xs no-print absolute top-1/2 -left-8 -translate-y-1/2 transition-opacity ${
+                        className={`btn btn-ghost btn-xs no-print mr-1 inline-flex h-6 w-6 p-0 transition-opacity ${
                           canContinue
-                            ? "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                            ? "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 group-hover:pointer-events-auto pointer-events-none"
                             : ""
                         }`}
                         disabled={!canContinue}
@@ -193,7 +288,7 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, canCon
                         aria-label={canContinue ? "Continue this task" : "Stop the running timer first"}
                         onClick={() => onContinue(e)}
                       >
-                        <Icon name="play" size={15} />
+                        <Icon name="play" size={14} />
                       </button>
                     ) : null}
                     {utcDate(e.start_time)}
@@ -219,11 +314,14 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, canCon
                     <TagList value={e.tags} />
                   </td>
                   <td className="no-print text-right">
-                    {!e.is_running ? (
-                      <button className="btn btn-ghost btn-xs" type="button" onClick={() => onEdit?.(e)}>
-                        Edit
-                      </button>
-                    ) : null}
+                    {(() => {
+                      const actions = [];
+                      if (onEdit) actions.push({ label: "Edit", run: () => onEdit(e) });
+                      if (onDuplicate && !e.is_running) actions.push({ label: "Duplicate", run: () => onDuplicate(e) });
+                      if (onContinue && !e.is_running) actions.push({ label: "Start again", run: () => onContinue(e) });
+                      if (onDelete && !e.is_running) actions.push({ label: "Delete", danger: true, run: () => onDelete(e) });
+                      return actions.length ? <RowMenu entry={e} actions={actions} /> : null;
+                    })()}
                   </td>
                 </tr>
               ))
