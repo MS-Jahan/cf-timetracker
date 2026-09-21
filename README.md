@@ -4,6 +4,12 @@
 
 <h1 align="center">CF Time Tracker</h1>
 
+> [!WARNING]
+> **Alpha software, under active development.** This project is in an early and unstable state; everything is still being tested and breaking changes are expected. Not every feature works perfectly yet.
+>
+> - **Tested and working:** core functionality - starting, stopping, and editing time entries; creating and editing clients, projects, and activities. The UI is largely bug-free.
+> - **Not yet tested:** CSV import, Google Sheets sync, and Gemini voice capture. These features exist but have not been verified; expect issues.
+
 Kimai-style time tracker running entirely on Cloudflare's free tier: **Pages** (Vite + React + Tailwind) → **Worker** (REST + MCP) → **D1** (SQLite at the edge), with optional **Google Sheets sync** and **Gemini voice capture**. A shared **Flutter** client covers desktop and mobile.
 
 🌍 **Live demo:** [https://cf-timetracker.pages.dev](https://cf-timetracker.pages.dev) - sample data included, reset anytime.
@@ -62,7 +68,7 @@ Cloudflare D1 (SQLite) ── time_entries, customers, projects, activities, pro
 # 1. API
 cd worker
 npm install
-npx wrangler d1 execute cf-timetracker --local --file=../db/schema.sql
+npx wrangler d1 execute DB --local --file=../db/schema.sql
 npm run dev                       # http://localhost:8787
 
 # 2. UI
@@ -92,7 +98,7 @@ cd ../web && VITE_API_BASE=https://<worker-url> npm run build \
   && npx wrangler pages deploy dist --project-name cf-timetracker --force
 ```
 
-Secrets (optional): `npx wrangler secret put GAS_SECRET` (Sheets sync) and `GEMINI_API_KEY` (voice). Nothing secret is committed; local overrides live in `.dev.vars` (gitignored).
+Secrets (optional): `npx wrangler secret put GAS_SECRET` (Sheets sync), `GEMINI_API_KEY` (voice), and `GEMINI_API_KEYS` (voice; comma-separated fallback list - each key is tried in order, first one that works wins). Nothing secret is committed; local overrides live in `.dev.vars` (gitignored).
 
 ## API sketch
 
