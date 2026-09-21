@@ -1,4 +1,5 @@
 import { formatDuration, formatMoney, toHours, utcDate } from "../lib/format.js";
+import Icon from "./Icon.jsx";
 import { Link } from "../lib/router.jsx";
 
 /**
@@ -56,8 +57,11 @@ function TagList({ value }) {
  * every figure is right-aligned in mono so a wrong one is visible at a glance, and the
  * period closes with the double rule an accountant would draw under a sum. The amount
  * owed carries the red pen, the same pen the running clock uses.
+ *
+ * `onContinue` opts the ledger into the hover play button that restarts a closed
+ * entry as a running timer; `canContinue` gates it while a timer is already running.
  */
-export default function Ledger({ entries, scopeLabel, onEdit, emptyMessage }) {
+export default function Ledger({ entries, scopeLabel, onEdit, onContinue, canContinue = true, emptyMessage }) {
   const closed = entries.filter((e) => !e.is_running);
   const totalSeconds = closed.reduce((sum, e) => sum + (e.duration_seconds || 0), 0);
   const totalCost = closed.reduce((sum, e) => sum + Number(e.cost || 0), 0);
@@ -171,11 +175,29 @@ export default function Ledger({ entries, scopeLabel, onEdit, emptyMessage }) {
               entries.map((e) => (
                 <tr
                   key={e.id}
-                  className={`whitespace-nowrap border-t border-base-300 ${
+                  className={`group whitespace-nowrap border-t border-base-300 ${
                     e.is_running ? "text-accent" : "hover:bg-base-200/70"
                   }`}
                 >
-                  <td className="figure ink-muted text-left">{utcDate(e.start_time)}</td>
+                  <td className="figure ink-muted relative text-left">
+                    {onContinue && !e.is_running && e.customer_id && e.project_id && e.activity_id ? (
+                      <button
+                        type="button"
+                        className={`btn btn-ghost btn-xs no-print absolute top-1/2 -left-8 -translate-y-1/2 transition-opacity ${
+                          canContinue
+                            ? "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                            : ""
+                        }`}
+                        disabled={!canContinue}
+                        title={canContinue ? "Continue this task" : "Stop the running timer first"}
+                        aria-label={canContinue ? "Continue this task" : "Stop the running timer first"}
+                        onClick={() => onContinue(e)}
+                      >
+                        <Icon name="play" size={15} />
+                      </button>
+                    ) : null}
+                    {utcDate(e.start_time)}
+                  </td>
                   <td className="text-left">
                     {e.customer_id ? <Link className="link link-hover" to={`/clients/${e.customer_id}`}>{e.customer_name || "-"}</Link> : (e.customer_name || "-")}
                   </td>

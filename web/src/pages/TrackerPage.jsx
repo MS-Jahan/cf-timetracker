@@ -55,8 +55,8 @@ export default function TrackerPage({ tracker }) {
    * Losing the single-timer race (another tab started first) isn't a failure: reload so
    * the clock shows the timer that actually won, and say so.
    */
-  const handleStart = async (payload) => {
-    const result = await runAction(() => startTimer(payload), "Timer started.");
+  const handleStart = async (payload, successMessage = "Timer started.") => {
+    const result = await runAction(() => startTimer(payload), successMessage);
     if (!result.ok && result.code === "timer_running") {
       await load();
       addNotice(
@@ -64,6 +64,20 @@ export default function TrackerPage({ tracker }) {
       );
     }
   };
+
+  /** Restart a closed ledger entry as a running timer with the same client, project, task, and note. */
+  const handleContinue = (entry) =>
+    handleStart(
+      {
+        customerId: entry.customer_id,
+        projectId: entry.project_id,
+        activityId: entry.activity_id,
+        description: entry.description || "",
+        tags: entry.tags || "",
+        hourlyRate: entry.rate_applied,
+      },
+      "Continued this task — the timer is running."
+    );
 
   const ledgerEntries = history ?? entries;
   const periods = useMemo(() => [...new Set(ledgerEntries.map((e) => utcMonth(e.start_time)))].sort().reverse(), [ledgerEntries]);
@@ -262,6 +276,8 @@ export default function TrackerPage({ tracker }) {
           entries={filtered}
           scopeLabel={period === "all" ? "" : period}
           onEdit={setEditingEntry}
+          onContinue={handleContinue}
+          canContinue={!activeTimer}
           emptyMessage={hasFilters ? "No entries match these filters. Clear them or choose a wider period." : undefined}
         />
       </section>
