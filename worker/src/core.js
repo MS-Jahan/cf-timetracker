@@ -967,13 +967,19 @@ export async function resetDemoData(env) {
 }
 
 export async function parseVoiceTask(env, { audioBase64, mimeType = "audio/webm" } = {}) {
-  if (!env.GEMINI_API_KEY) return { status: "unavailable", error: "Voice capture is not configured. Add GEMINI_API_KEY to the Worker secrets." };
+  // Key list with fallback: GEMINI_API_KEY plus comma-separated GEMINI_API_KEYS.
+  // Each key is tried in order; the first key whose request succeeds wins, so a
+  // quota-exhausted or revoked key just falls through to the next one.
+  const keys = [
+    env.GEMINI_API_KEY,
+    ...(typeof env.GEMINI_API_KEYS === "string" ? env.GEMINI_API_KEYS.split(",") : []),
+  ].map((key) => (typeof key === "string" ? key.trim() : "")).filter(Boolean);
+  if (!keys.length) return { status: "unavailable", error: "Voice capture is not configured. Add GEMINI_API_KEY (or GEMINI_API_KEYS) to the Worker secrets." };
   if (typeof audioBase64 !== "string" || audioBase64.length < 100) return { status: "invalid", error: "audioBase64 is required" };
   if (audioBase64.length > 12_000_000) return { status: "invalid", error: "Audio must be 9 MB or smaller" };
   if (!/^audio\/[a-z0-9.+-]+$/i.test(mimeType)) return { status: "invalid", error: "mimeType must be an audio MIME type" };
 
   const model = env.GEMINI_MODEL || "gemini-2.5-flash";
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`;
   const prompt = [
     "Convert this time-tracking voice note into JSON only.",
     "Do not invent IDs, clients, projects, or activities.",
@@ -981,58 +987,67 @@ export async function parseVoiceTask(env, { audioBase64, mimeType = "audio/webm"
     "Use empty strings when a name is not spoken. Keep description concise. Tags should be lowercase and contain at most 8 items.",
   ].join(" ");
 
-  let response;
-  try {
-    response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: mimeType, data: audioBase64 } }] }],
-        generationConfig: {
-          temperature: 0.1,
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: "OBJECT",
-            properties: {
-              description: { type: "STRING" },
-              tags: { type: "ARRAY", items: { type: "STRING" } },
-              client: { type: "STRING" },
-              project: { type: "STRING" },
-              activity: { type: "STRING" },
-              hourlyRate: { type: "NUMBER", nullable: true },
+  let lastError = { status: "upstream_error", error: "No Gemini key was attempted" };
+  for (const key of keys) {
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
+    let response;
+    try {
+      response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: mimeType, data: audioBase64 } }] }],
+          generationConfig: {
+            temperature: 0.1,
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: "OBJECT",
+              properties: {
+                description: { type: "STRING" },
+                tags: { type: "ARRAY", items: { type: "STRING" } },
+                client: { type: "STRING" },
+                project: { type: "STRING" },
+                activity: { type: "STRING" },
+                hourlyRate: { type: "NUMBER", nullable: true },
+              },
+              required: ["description", "tags", "client", "project", "activity", "hourlyRate"],
             },
-            required: ["description", "tags", "client", "project", "activity", "hourlyRate"],
           },
-        },
-      }),
-    });
-  } catch (error) {
-    return { status: "upstream_error", error: `Gemini request failed: ${error.message}` };
+        }),
+      });
+    } catch (error) {
+      lastError = { status: "upstream_error", error: `Gemini request failed: ${error.message}` };
+      continue; // network failure - try the next key
+    }
+
+    const raw = await response.text();
+    if (!response.ok) {
+      lastError = { status: "upstream_error", error: `Gemini returned ${response.status}`, excerpt: raw.slice(0, 300) };
+      continue; // quota/auth/model error for this key - try the next one
+    }
+    let payload;
+    try { payload = JSON.parse(raw); } catch { lastError = { status: "upstream_error", error: "Gemini returned invalid JSON" }; continue; }
+    const text = payload?.candidates?.[0]?.content?.parts?.find((part) => part.text)?.text;
+    if (!text) { lastError = { status: "upstream_error", error: "Gemini returned no task draft" }; continue; }
+
+    let draft;
+    try { draft = JSON.parse(text); } catch { lastError = { status: "upstream_error", error: "Gemini returned a non-JSON task draft" }; continue; }
+    const tags = Array.isArray(draft.tags) ? draft.tags.map((tag) => String(tag).trim().toLowerCase()).filter(Boolean).slice(0, 8) : [];
+    const hourlyRate = draft.hourlyRate === null || draft.hourlyRate === undefined || draft.hourlyRate === "" ? null : Number(draft.hourlyRate);
+    if (hourlyRate !== null && (!Number.isFinite(hourlyRate) || hourlyRate < 0)) return { status: "upstream_error", error: "Gemini returned an invalid hourly rate" };
+    return {
+      status: "ok",
+      draft: {
+        description: String(draft.description || "").slice(0, 500),
+        tags,
+        client: String(draft.client || "").slice(0, 200),
+        project: String(draft.project || "").slice(0, 200),
+        activity: String(draft.activity || "").slice(0, 200),
+        hourlyRate,
+      },
+    };
   }
-
-  const raw = await response.text();
-  if (!response.ok) return { status: "upstream_error", error: `Gemini returned ${response.status}`, excerpt: raw.slice(0, 300) };
-  let payload;
-  try { payload = JSON.parse(raw); } catch { return { status: "upstream_error", error: "Gemini returned invalid JSON" }; }
-  const text = payload?.candidates?.[0]?.content?.parts?.find((part) => part.text)?.text;
-  if (!text) return { status: "upstream_error", error: "Gemini returned no task draft" };
-
-  let draft;
-  try { draft = JSON.parse(text); } catch { return { status: "upstream_error", error: "Gemini returned a non-JSON task draft" }; }
-  const tags = Array.isArray(draft.tags) ? draft.tags.map((tag) => String(tag).trim().toLowerCase()).filter(Boolean).slice(0, 8) : [];
-  const hourlyRate = draft.hourlyRate === null || draft.hourlyRate === undefined || draft.hourlyRate === "" ? null : Number(draft.hourlyRate);
-  if (hourlyRate !== null && (!Number.isFinite(hourlyRate) || hourlyRate < 0)) return { status: "upstream_error", error: "Gemini returned an invalid hourly rate" };
-  return {
-    status: "ok",
-    draft: {
-      description: String(draft.description || "").slice(0, 500),
-      tags,
-      client: String(draft.client || "").slice(0, 200),
-      project: String(draft.project || "").slice(0, 200),
-      activity: String(draft.activity || "").slice(0, 200),
-      hourlyRate,
-    },
-  };
+  return lastError;
 }
 
 /**
