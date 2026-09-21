@@ -139,7 +139,7 @@ async function main() {
     mcpTotals ? `${mcpTotals.total_seconds} s / ${mcpTotals.total_cost}` : "no result");
 
   console.log(`\nprobe entry: ${runningId}`);
-  console.log(`cleanup (local): cd worker && npx wrangler d1 execute cf-timetracker --local --command "DELETE FROM time_entries WHERE description = 'edge-case-probe'"`);
+  console.log(`cleanup (local): cd worker && npx wrangler d1 execute DB --local --command "DELETE FROM time_entries WHERE description = 'edge-case-probe'"`);
   console.log(failures === 0 ? "\nALL EDGE-CASE CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
   process.exitCode = failures === 0 ? 0 : 1;
 }

@@ -17,8 +17,11 @@ const remoteFlag = isRemote ? "--remote" : "--local";
 
 function run(sql) {
   const escaped = sql.replace(/"/g, '\\"');
+  // Local: the top-level binding `DB` (demo name `cf-timetracker` only exists
+  // under [env.demo] in worker/wrangler.toml). Remote: the demo instance.
+  const target = isRemote ? "cf-timetracker --env demo --remote" : "DB --local";
   execSync(
-    `npx wrangler d1 execute cf-timetracker ${remoteFlag} --command="${escaped}"`,
+    `npx wrangler d1 execute ${target} --command="${escaped}"`,
     { stdio: "inherit", cwd: new URL("../", import.meta.url).pathname }
   );
 }
