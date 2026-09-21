@@ -172,7 +172,10 @@ export default function App() {
       <main className="mx-auto flex min-h-dvh w-full max-w-[120rem] flex-col border-x border-base-300 bg-base-100 lg:flex-row">
       <aside className="no-print border-b border-base-300 px-5 py-5 lg:sticky lg:top-0 lg:flex lg:h-dvh lg:w-56 lg:shrink-0 lg:flex-col lg:border-b-0 lg:border-r lg:px-4 lg:py-8">
         <Link to="/" className="flex items-center gap-2.5 text-lg font-semibold tracking-tight">
-          <img src="/logo-mark.png" alt="" className="h-7 w-7" />
+          {/* White rounded backing keeps the navy mark visible on grey backgrounds */}
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white p-1 shadow-sm ring-1 ring-black/10">
+            <img src="/logo-mark.png" alt="" className="h-7 w-7" />
+          </span>
           Timetracker
         </Link>
         <p className="ink-muted mt-1 text-sm">Billable hours, clearly kept.</p>

@@ -25,9 +25,11 @@ export default function SplashScreen({ onDone }) {
       aria-busy="true"
       aria-label="Loading application"
     >
-      {/* Brand mark (web/public/logo-mark.png, transparent) */}
+      {/* Brand mark (web/public/logo-mark.png, transparent) on white rounded backing */}
       <div className={phase === "logo" ? "animate-scale-in" : ""}>
-        <img src="/logo-mark.png" alt="CF Time Tracker" width="96" height="88" />
+        <span className="flex items-center justify-center rounded-2xl bg-white p-3 shadow-md ring-1 ring-black/10">
+          <img src="/logo-mark.png" alt="CF Time Tracker" width="96" height="88" />
+        </span>
       </div>
 
       <p className="mt-4 text-lg font-semibold tracking-tight text-base-content">
