@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { formatDuration, formatMoney, toHours, utcDate } from "../lib/format.js";
 import Icon from "./Icon.jsx";
 import { Link } from "../lib/router.jsx";
@@ -115,32 +116,35 @@ function RowMenu({ entry, actions }) {
       >
         <Icon name="kebab" size={16} />
       </button>
-      {open && coords ? (
-        <div
-          ref={panelRef}
-          className="fixed z-[70] w-40 border border-base-300 bg-base-100 py-1 shadow-xl"
-          style={{ left: coords.left, top: coords.top }}
-          role="menu"
-          aria-label="Row actions"
-        >
-          {actions.map((action) => (
-            <button
-              key={action.label}
-              type="button"
-              role="menuitem"
-              className={`block w-full px-3 py-1.5 text-left text-sm hover:bg-base-200 ${
-                action.danger ? "text-error" : ""
-              }`}
-              onClick={() => {
-                setOpen(false);
-                action.run();
-              }}
+      {open && coords
+        ? createPortal(
+            <div
+              ref={panelRef}
+              className="fixed z-[70] w-40 border border-base-300 bg-base-100 py-1 shadow-xl"
+              style={{ left: coords.left, top: coords.top }}
+              role="menu"
+              aria-label="Row actions"
             >
-              {action.label}
-            </button>
-          ))}
-        </div>
-      ) : null}
+              {actions.map((action) => (
+                <button
+                  key={action.label}
+                  type="button"
+                  role="menuitem"
+                  className={`block w-full px-3 py-1.5 text-left text-sm hover:bg-base-200 ${
+                    action.danger ? "text-error" : ""
+                  }`}
+                  onClick={() => {
+                    setOpen(false);
+                    action.run();
+                  }}
+                >
+                  {action.label}
+                </button>
+              ))}
+            </div>,
+            document.body
+          )
+        : null}
     </>
   );
 }

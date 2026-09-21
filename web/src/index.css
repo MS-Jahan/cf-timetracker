@@ -263,9 +263,11 @@ body {
   animation: splashFadeOut 400ms ease-in forwards;
 }
 
-/* Page content enters with a subtle fade+slide */
+/* Page content enters with a subtle fade+slide. `backwards` (not `both`) releases
+   the animation's transform when it ends - a retained translateY(0) would make this
+   div the containing block for every position:fixed descendant (menus, modals). */
 @utility page-enter {
-  animation: slideUp 250ms ease-out both;
+  animation: slideUp 250ms ease-out backwards;
 }
 
 @media (prefers-reduced-motion: reduce) {

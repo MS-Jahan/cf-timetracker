@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Icon from "./Icon.jsx";
 
 /* Curated emoji catalog with search keywords. Large enough to feel like a real
@@ -157,54 +158,57 @@ export default function EmojiPicker({ value, onChange, label = "Emoji" }) {
         {value ? <span className="text-lg leading-none">{value}</span> : <><Icon name="plus" size={14} /><span className="text-xs">emoji</span></>}
       </button>
 
-      {open && coords ? (
-        <div
-          ref={panelRef}
-          className="fixed z-[70] w-72 border border-base-300 bg-base-100 p-3 shadow-xl"
-          style={{ left: coords.left, top: coords.top }}
-          role="dialog"
-          aria-label="Choose an emoji"
-        >
-          <input
-            className="input input-sm mb-2 w-full"
-            placeholder="Search or paste an emoji…"
-            value={query}
-            autoFocus
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          <div className="grid max-h-56 grid-cols-8 gap-1 overflow-y-auto">
-            {matches.map(([emoji, keywords]) => (
-              <button
-                key={keywords}
-                type="button"
-                className="btn btn-ghost btn-sm text-xl"
-                title={keywords.split(" ")[0]}
-                onClick={() => {
-                  onChange(emoji);
-                  setOpen(false);
-                  setQuery("");
-                }}
-              >
-                {emoji}
-              </button>
-            ))}
-            {!matches.length ? <p className="col-span-8 py-4 text-center text-sm ink-muted">No match. Paste any emoji in the search box.</p> : null}
-          </div>
-          {query.trim() && /\p{Extended_Pictographic}/u.test(query) ? (
-            <button
-              type="button"
-              className="btn btn-primary btn-sm mt-2 w-full"
-              onClick={() => {
-                onChange(query.trim());
-                setOpen(false);
-                setQuery("");
-              }}
+      {open && coords
+        ? createPortal(
+            <div
+              ref={panelRef}
+              className="fixed z-[70] w-72 border border-base-300 bg-base-100 p-3 shadow-xl"
+              style={{ left: coords.left, top: coords.top }}
+              role="dialog"
+              aria-label="Choose an emoji"
             >
-              Use pasted emoji {query.trim()}
-            </button>
-          ) : null}
-        </div>
-      ) : null}
+              <input
+                className="input input-sm mb-2 w-full"
+                placeholder="Search or paste an emoji…"
+                value={query}
+                autoFocus
+                onChange={(e) => setQuery(e.target.value)}
+              />
+              <div className="grid max-h-56 grid-cols-8 gap-1 overflow-y-auto">
+                {matches.map(([emoji, keywords]) => (
+                  <button
+                    key={keywords}
+                    type="button"
+                    className="btn btn-ghost btn-sm text-xl"
+                    title={keywords.split(" ")[0]}
+                    onClick={() => {
+                      onChange(emoji);
+                      setOpen(false);
+                      setQuery("");
+                    }}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+                {!matches.length ? <p className="col-span-8 py-4 text-center text-sm ink-muted">No match. Paste any emoji in the search box.</p> : null}
+              </div>
+              {query.trim() && /\p{Extended_Pictographic}/u.test(query) ? (
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm mt-2 w-full"
+                  onClick={() => {
+                    onChange(query.trim());
+                    setOpen(false);
+                    setQuery("");
+                  }}
+                >
+                  Use pasted emoji {query.trim()}
+                </button>
+              ) : null}
+            </div>,
+            document.body
+          )
+        : null}
     </>
   );
 }
