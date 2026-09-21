@@ -76,8 +76,8 @@ jobs:
           # Baked in at build time, see docs/2026-09-20-demo-deploy.md
           VITE_API_BASE: https://cf-timetracker-api.ssarwarjahan.workers.dev
 
-      - name: Remove stale Workers-assets artifact
-        run: rm -f dist/wrangler.json
+      - name: Remove stale Workers-assets deploy config
+        run: rm -rf .wrangler dist/wrangler.json
         working-directory: web
 
       - name: Deploy to Cloudflare Pages
