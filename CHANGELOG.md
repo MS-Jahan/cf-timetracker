@@ -3,6 +3,9 @@
 All notable changes. Newest first. Rules: `docs/2026-10-09-versioning.md` (SemVer, pre-1.0: `feat` = minor, `fix` = patch; docs/chore/ci do not bump).
 Versions 0.1.0 to 0.15.x were assigned retroactively from commit history on 2026-10-09.
 
+## 0.19.0 - 2026-10-09
+- feat: read scaling phase 2 - the ledger and print page load only the selected local month (and client/project) from the server as lean rows; period picker built from `GET /api/entries/bounds`; keyset paging (`before`), `customerId`/`projectId`/`activityId` filters on `GET /api/entries`; composite indexes (migration `2026-10-09-read-scaling-p2.sql`, optional for correctness)
+
 ## 0.18.1 - 2026-10-09
 - fix: read scaling phase 1 - history no longer refetched on every bootstrap refresh; `data_rev` counter + `GET /api/rev` let a returning tab detect other-device changes with one row read; `GET /api/entries` counts only on the first page and reports `has_more`; index on `time_entries(activity_id)`
 

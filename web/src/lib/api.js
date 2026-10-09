@@ -114,25 +114,43 @@ export const createTimeEntry = (payload) =>
 export const deleteTimeEntry = (id) =>
   request(`/api/entries/${encodeURIComponent(id)}`, { method: "DELETE" });
 
-/** Paginated history in a half-open [fromMs, toMs) range (both optional). */
-export const listEntries = ({ fromMs, toMs, limit = 50, offset = 0 } = {}) => {
-  const params = new URLSearchParams({ limit, offset });
+/**
+ * One page of history. Optional: half-open [fromMs, toMs) range, client/project/activity
+ * filters, keyset cursor `before` (preferred over offset), `lean` (ids only, no name joins).
+ */
+export const listEntries = ({ fromMs, toMs, limit = 50, offset = 0, customerId, projectId, activityId, before, lean } = {}) => {
+  const params = new URLSearchParams({ limit });
+  if (before) params.set("before", before);
+  else params.set("offset", offset);
   if (fromMs !== undefined && toMs !== undefined) {
     params.set("fromMs", fromMs);
     params.set("toMs", toMs);
   }
+  if (customerId) params.set("customerId", customerId);
+  if (projectId) params.set("projectId", projectId);
+  if (activityId) params.set("activityId", activityId);
+  if (lean) params.set("lean", "1");
   return request(`/api/entries?${params.toString()}`);
 };
 
-/** The complete history, following pagination to the end (ledger + month filters). */
-export const fetchAllEntries = async ({ limit = 200 } = {}) => {
+/** Earliest/latest entry start (null/null when empty): cheap input for the period picker. */
+export const getEntryBounds = () => request("/api/entries/bounds");
+
+/**
+ * Every entry matching the filters, following the keyset cursor to the end. Meant for a
+ * bounded selection (one month, one client); an unbounded call pages through all history.
+ */
+export const fetchEntries = async ({ limit = 200, ...filters } = {}) => {
   const out = [];
+  let before;
   let offset = 0;
   for (;;) {
-    const page = await listEntries({ limit, offset });
+    const page = await listEntries({ ...filters, limit, before, offset });
     out.push(...page.entries);
-    if (page.entries.length < limit) return out;
-    offset += page.entries.length;
+    if (page.paging?.has_more === false || page.entries.length < limit) return out;
+    // Older workers have no cursor: fall back to offset paging.
+    if (page.paging?.next) before = page.paging.next;
+    else offset += page.entries.length;
   }
 };
 

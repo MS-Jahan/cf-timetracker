@@ -1,6 +1,6 @@
 # Read scaling and multi-device freshness plan (2026-10-09)
 
-Status: **Phase 1 shipped in 0.18.1**; phases 2-4 are plans only. Phases ship as separate releases under `docs/2026-10-09-versioning.md`.
+Status: **Phase 1 shipped in 0.18.1, Phase 2 in 0.19.0**; phases 3-4 are plans only. Phases ship as separate releases under `docs/2026-10-09-versioning.md`.
 
 ## 1. Why
 
@@ -64,7 +64,9 @@ Small, low risk, no API change.
 - Files: `web/src/pages/TrackerPage.jsx`, `web/src/lib/api.js`, `worker/src/core.js`, `worker/src/index.js`, `db/schema.sql`, `db/migrations/2026-10-xx-read-scaling-p1.sql`, worker tests.
 - Expected: no refetch storm on actions; COUNT cost /N.
 
-### Phase 2 - load only what is on screen (minor, 0.19.0) - the real 5-year fix
+### Phase 2 - load only what is on screen (minor, 0.19.0) - DONE - the real 5-year fix
+Implementation notes: periods are local months (`web/src/lib/periods.js`); the ledger default is the current month (preference key bumped to `cf-tt-ledger-period-v2`); `GET /api/entries` gained `customerId/projectId/activityId`, `before` cursor, `lean`, `paging.next`; `GET /api/entries/bounds`; names/currency for lean rows are filled by `web/src/lib/enrich.js` from bootstrap masters. `PrintPage` fetches only its month/client/project. Not done: a warning before printing "All months" (E12) and always showing a running entry that started before the selected month (E15). Measured on the local D1 with 11k synthetic entries (SQLite VM steps, proxy for rows read): old full-history load 2,982,160 vs new month load 3,335 (~900x fewer); EXPLAIN QUERY PLAN shows the new composite indexes used with no temp B-tree. Migration `2026-10-09-read-scaling-p2.sql` is optional for correctness, needed for the speed-up on large tables.
+Original plan:
 1. Ledger requests the selected period from the server: default **this local month** (`fromMs/toMs`), with `customerId`/`projectId` filters server-side (new optional params on `GET /api/entries`).
 2. Month dropdown from `GET /api/entries/bounds` -> `{ minStart, maxStart }` (two index lookups); months generated client-side (empty months allowed or greyed).
 3. Keyset pagination: `GET /api/entries?before=<start_time>:<id>&limit=` alongside existing `offset` (kept for Flutter until migrated).

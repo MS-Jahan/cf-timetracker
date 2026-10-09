@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Ledger from "../components/Ledger.jsx";
 import Icon from "../components/Icon.jsx";
-import { getBootstrap as bootstrap, fetchAllEntries } from "../lib/api.js";
-import { utcMonth } from "../lib/format.js";
+import { getBootstrap as bootstrap, fetchEntries } from "../lib/api.js";
+import { buildMasterLookup, enrichEntries } from "../lib/enrich.js";
+import { monthRange } from "../lib/periods.js";
 import { Link } from "../lib/router.jsx";
 
 /**
@@ -24,25 +25,29 @@ export default function PrintPage() {
   useEffect(() => {
     document.title = "Print timesheet · Timetracker";
     let cancelled = false;
-    Promise.all([bootstrap(), fetchAllEntries()])
-      .then(([data, allEntries]) => {
+    // Only the requested month/client/project is fetched (not the whole history), as lean
+    // rows whose names come from the masters in bootstrap.
+    const range = monthRange(month);
+    Promise.all([
+      bootstrap(),
+      fetchEntries({
+        ...(range || {}),
+        customerId: clientId === "all" ? undefined : clientId,
+        projectId: projectId === "all" ? undefined : projectId,
+        lean: true,
+      }),
+    ])
+      .then(([data, rows]) => {
         if (cancelled) return;
         setMeta({ customers: data.customers || [], projects: data.projects || [] });
-        setEntries(allEntries);
+        setEntries(enrichEntries(rows, buildMasterLookup(data)));
       })
       .catch((err) => !cancelled && setError(err.message));
     return () => { cancelled = true; };
   }, []);
 
-  const filtered = useMemo(() => {
-    if (!entries) return [];
-    return entries.filter((e) => {
-      if (month !== "all" && utcMonth(e.start_time) !== month) return false;
-      if (clientId !== "all" && e.customer_id !== clientId) return false;
-      if (projectId !== "all" && e.project_id !== projectId) return false;
-      return true;
-    });
-  }, [entries, month, clientId, projectId]);
+  // The server already applied month/client/project; nothing left to filter here.
+  const filtered = entries || [];
 
   // One automatic print attempt once the data is on screen; the toolbar's
   // Print button covers retries and the case where the user cancelled.

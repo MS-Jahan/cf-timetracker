@@ -902,7 +902,10 @@ export async function removeProjectTask(env, projectId, taskId) {
  * Paginated time history in a half-open [fromMs, toMs) range (both optional).
  * Closed and running entries, newest first, id-ordered for stable pages.
  */
-export async function listEntries(env, { fromMs, toMs, limit = 50, offset = 0 } = {}) {
+export async function listEntries(
+  env,
+  { fromMs, toMs, limit = 50, offset = 0, customerId, projectId, activityId, before, lean = false } = {}
+) {
   const maxLimit = Math.min(Math.max(Number(limit) || 50, 1), 200);
   const safeOffset = Math.max(Number(offset) || 0, 0);
 
@@ -917,42 +920,90 @@ export async function listEntries(env, { fromMs, toMs, limit = 50, offset = 0 } 
     if (start > end) return { status: "invalid", error: "fromMs must be <= toMs" };
   }
 
+  // Keyset cursor "<start_time>:<id>" = continue strictly after that row in
+  // (start_time DESC, id DESC) order. Unlike OFFSET it neither re-reads skipped rows
+  // nor skips/duplicates rows when entries are added between pages.
+  let cursor = null;
+  if (before !== undefined && before !== null && before !== "") {
+    const sep = String(before).indexOf(":");
+    const cursorStart = Number(String(before).slice(0, sep));
+    const cursorId = String(before).slice(sep + 1);
+    if (sep < 1 || !Number.isFinite(cursorStart) || !cursorId) {
+      return { status: "invalid", error: "before must look like <start_time>:<id>" };
+    }
+    cursor = { start: cursorStart, id: cursorId };
+  }
+
   const filters = [];
   const bind = [];
   if (start !== null) {
     filters.push("te.start_time >= ?", "te.start_time < ?");
     bind.push(start, end);
   }
-  const where = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
+  if (customerId) { filters.push("te.customer_id = ?"); bind.push(customerId); }
+  if (projectId) { filters.push("te.project_id = ?"); bind.push(projectId); }
+  if (activityId) { filters.push("te.activity_id = ?"); bind.push(activityId); }
+  const countWhere = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
+  const pageFilters = [...filters];
+  const pageBind = [...bind];
+  if (cursor) {
+    pageFilters.push("(te.start_time < ? OR (te.start_time = ? AND te.id < ?))");
+    pageBind.push(cursor.start, cursor.start, cursor.id);
+  }
+  const where = pageFilters.length ? `WHERE ${pageFilters.join(" AND ")}` : "";
+  const paged = cursor ? "LIMIT ?" : "LIMIT ? OFFSET ?";
+  const pagedBind = cursor ? [maxLimit + 1] : [maxLimit + 1, safeOffset];
 
-  // Fetch one extra row to learn whether another page exists, and count the table
-  // only for the first page: re-counting on every page re-reads the whole range.
-  const [entries, count] = await Promise.all([
-    env.DB.prepare(`
-      SELECT te.*, c.name AS customer_name, COALESCE(te.currency, c.currency) AS currency, p.name AS project_name, a.name AS activity_name
+  // `lean` skips the three name joins (about 4x fewer row reads per entry): clients that
+  // already hold clients/projects/activities resolve names themselves.
+  const select = lean
+    ? "SELECT te.* FROM time_entries te"
+    : `SELECT te.*, c.name AS customer_name, COALESCE(te.currency, c.currency) AS currency, p.name AS project_name, a.name AS activity_name
       FROM time_entries te
       LEFT JOIN customers c ON te.customer_id = c.id
       LEFT JOIN projects p ON te.project_id = p.id
-      LEFT JOIN activities a ON te.activity_id = a.id
+      LEFT JOIN activities a ON te.activity_id = a.id`;
+
+  // Fetch one extra row to learn whether another page exists, and count only for the
+  // first page: re-counting on every page re-reads the whole range.
+  const firstPage = !cursor && safeOffset === 0;
+  const [entries, count] = await Promise.all([
+    env.DB.prepare(`
+      ${select}
       ${where}
       ORDER BY te.start_time DESC, te.id DESC
-      LIMIT ? OFFSET ?
-    `).bind(...bind, maxLimit + 1, safeOffset).all(),
-    safeOffset === 0
-      ? env.DB.prepare(`SELECT COUNT(*) AS total FROM time_entries te ${where}`).bind(...bind).first()
+      ${paged}
+    `).bind(...pageBind, ...pagedBind).all(),
+    firstPage
+      ? env.DB.prepare(`SELECT COUNT(*) AS total FROM time_entries te ${countWhere}`).bind(...bind).first()
       : Promise.resolve(null),
   ]);
 
   const rows = entries.results || [];
   const hasMore = rows.length > maxLimit;
   const page = hasMore ? rows.slice(0, maxLimit) : rows;
+  const last = page[page.length - 1];
 
   return {
     status: "ok",
     entries: page,
-    // `total` is only computed for the first page (null afterwards); `has_more` is always set.
-    paging: { limit: maxLimit, offset: safeOffset, returned: page.length, has_more: hasMore, total: safeOffset === 0 ? count?.total || 0 : null },
+    // `total` only on the first page (null afterwards); `has_more` always; `next` is the
+    // keyset cursor for the following page (null on the last one).
+    paging: {
+      limit: maxLimit,
+      offset: safeOffset,
+      returned: page.length,
+      has_more: hasMore,
+      total: firstPage ? count?.total || 0 : null,
+      next: hasMore && last ? `${last.start_time}:${last.id}` : null,
+    },
   };
+}
+
+/** Earliest/latest entry start (two index lookups) so clients can build a period picker without downloading history. */
+export async function entryBounds(env) {
+  const row = await env.DB.prepare("SELECT (SELECT MIN(start_time) FROM time_entries) AS min_start, (SELECT MAX(start_time) FROM time_entries) AS max_start").first();
+  return { status: "ok", minStart: row?.min_start ?? null, maxStart: row?.max_start ?? null };
 }
 
 /**

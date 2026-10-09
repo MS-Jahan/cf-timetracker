@@ -3,14 +3,18 @@ import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import EntryEditor from "../components/EntryEditor.jsx";
 import EntryForm from "../components/EntryForm.jsx";
 import Ledger from "../components/Ledger.jsx";
-import { API_BASE, createTimeEntry, deleteTimeEntry, fetchAllEntries, startTimer, stopTimer, updateTimeEntry } from "../lib/api.js";
-import { buildCsv, downloadCsv, formatDuration, utcMonth } from "../lib/format.js";
+import { API_BASE, createTimeEntry, deleteTimeEntry, fetchEntries, getEntryBounds, startTimer, stopTimer, updateTimeEntry } from "../lib/api.js";
+import { buildMasterLookup, enrichEntries } from "../lib/enrich.js";
+import { buildCsv, downloadCsv, formatDuration, longMonth } from "../lib/format.js";
+import { currentMonth, monthOptions, monthRange } from "../lib/periods.js";
 import { Link, navigate } from "../lib/router.jsx";
 import Icon from "../components/Icon.jsx";
 
-const PERIOD_KEY = "cf-tt-ledger-period";
+// v2: the default moved from "all months" to the current month (the ledger now loads
+// only the selected period from the server; see docs/2026-10-09-read-scaling-plan.md).
+const PERIOD_KEY = "cf-tt-ledger-period-v2";
 const readPeriod = () => {
-  try { return localStorage.getItem(PERIOD_KEY) || "all"; } catch { return "all"; }
+  try { return localStorage.getItem(PERIOD_KEY) || currentMonth(); } catch { return currentMonth(); }
 };
 
 export default function TrackerPage({ tracker }) {
@@ -30,26 +34,51 @@ export default function TrackerPage({ tracker }) {
     activities,
     projectTasks,
     activeTimer,
+    archivedCustomers,
+    archivedProjects,
+    archivedActivities,
   } = tracker;
   const [period, setPeriod] = useState(readPeriod);
   const [clientFilter, setClientFilter] = useState("all");
   const [projectFilter, setProjectFilter] = useState("all");
   const [editingEntry, setEditingEntry] = useState(null);
   const [deletingEntry, setDeletingEntry] = useState(null);
-  // Bootstrap only carries the last 50 entries, so the ledger fetches the full
-  // history itself; `entries` is the instant first paint, `history` the truth.
+  // The ledger loads only the selected period (and client/project) from the server,
+  // as lean rows whose names are resolved here from the masters we already hold.
   const [history, setHistory] = useState(null);
+  const [historyLoading, setHistoryLoading] = useState(true);
   const [historyError, setHistoryError] = useState("");
-  const reloadHistory = useCallback(() => {
-    fetchAllEntries().then((rows) => {
-      setHistory(rows);
-      setHistoryError("");
-    }).catch((err) => setHistoryError(err.message));
-  }, []);
-  // Reload the full history only when the server data revision moves (this page's own
-  // changes and other devices' both bump it). Older backends without a revision fall
-  // back to the previous "any bootstrap change" behaviour.
-  useEffect(() => { reloadHistory(); }, [reloadHistory, tracker.dataRev ?? tracker.entries]);
+  const [bounds, setBounds] = useState(null);
+  const lookup = useMemo(
+    () => buildMasterLookup({ customers, projects, activities, archivedCustomers, archivedProjects, archivedActivities }),
+    [customers, projects, activities, archivedCustomers, archivedProjects, archivedActivities]
+  );
+  const [reloadTick, setReloadTick] = useState(0);
+  const reloadHistory = useCallback(() => setReloadTick((tick) => tick + 1), []);
+  // Reload when the server data revision moves (own changes and other devices' both bump
+  // it) or the selection changes. Older backends without a revision fall back to
+  // "any bootstrap change".
+  const revKey = tracker.dataRev ?? tracker.entries;
+  useEffect(() => {
+    let cancelled = false;
+    const range = monthRange(period);
+    setHistoryLoading(true);
+    fetchEntries({
+      ...(range || {}),
+      customerId: clientFilter === "all" ? undefined : clientFilter,
+      projectId: projectFilter === "all" ? undefined : projectFilter,
+      lean: true,
+    })
+      .then((rows) => {
+        if (cancelled) return;
+        setHistory(rows);
+        setHistoryError("");
+      })
+      .catch((err) => !cancelled && setHistoryError(err.message))
+      .finally(() => !cancelled && setHistoryLoading(false));
+    getEntryBounds().then((b) => !cancelled && setBounds(b)).catch(() => {});
+    return () => { cancelled = true; };
+  }, [period, clientFilter, projectFilter, revKey, reloadTick]);
 
   const selectPeriod = (value) => {
     setPeriod(value);
@@ -111,18 +140,10 @@ export default function TrackerPage({ tracker }) {
     if (result.ok) setDeletingEntry(null);
   };
 
-  const ledgerEntries = history ?? entries;
-  const periods = useMemo(() => [...new Set(ledgerEntries.map((e) => utcMonth(e.start_time)))].sort().reverse(), [ledgerEntries]);
-
-  const filtered = useMemo(
-    () =>
-      ledgerEntries.filter((e) => {
-        if (period !== "all" && utcMonth(e.start_time) !== period) return false;
-        if (clientFilter !== "all" && e.customer_id !== clientFilter) return false;
-        if (projectFilter !== "all" && e.project_id !== projectFilter) return false;
-        return true;
-      }),
-    [ledgerEntries, period, clientFilter, projectFilter]
+  const filtered = useMemo(() => (history ? enrichEntries(history, lookup) : []), [history, lookup]);
+  const periods = useMemo(
+    () => monthOptions(bounds?.minStart, bounds?.maxStart, [period]),
+    [bounds, period]
   );
 
   if (status === "loading") {
@@ -151,13 +172,14 @@ export default function TrackerPage({ tracker }) {
 
   const filterProjects = clientFilter === "all" ? projects : projects.filter((p) => p.customer_id === clientFilter);
 
-  const hasFilters = period !== "all" || clientFilter !== "all" || projectFilter !== "all";
-  const ledgerSummary = filtered.length === ledgerEntries.length && !hasFilters
-    ? `All ${ledgerEntries.length} entries.`
-    : `${filtered.length} of ${ledgerEntries.length} entries match the filters.`;
+  // "Filters" = anything narrower than the default view (current month, everyone).
+  const hasFilters = period !== currentMonth() || clientFilter !== "all" || projectFilter !== "all";
+  const ledgerSummary = historyLoading && !history
+    ? "Loading entries…"
+    : `${filtered.length} ${filtered.length === 1 ? "entry" : "entries"}${period === "all" ? "" : ` in ${longMonth(period)}`}${clientFilter !== "all" || projectFilter !== "all" ? " for this selection" : ""}.`;
 
   const clearFilters = () => {
-    setPeriod("all");
+    selectPeriod(currentMonth());
     setClientFilter("all");
     setProjectFilter("all");
   };
@@ -173,7 +195,7 @@ export default function TrackerPage({ tracker }) {
         {notice ? <p className="band band-notice" role="status">{notice}</p> : null}
         {historyError ? (
           <p className="band band-error" role="alert">
-            <strong>Could not load the full history.</strong> Showing the most recent entries only.{" "}
+            <strong>Could not load these entries.</strong>{" "}
             <button type="button" className="link" onClick={reloadHistory}>Retry</button>
           </p>
         ) : null}
@@ -227,7 +249,7 @@ export default function TrackerPage({ tracker }) {
                 <option value="all">All months</option>
                 {periods.map((m) => (
                   <option key={m} value={m}>
-                    {m}
+                    {longMonth(m)}
                   </option>
                 ))}
               </select>
@@ -307,7 +329,7 @@ export default function TrackerPage({ tracker }) {
           onDuplicate={handleDuplicate}
           onDelete={setDeletingEntry}
           canContinue={!activeTimer}
-          emptyMessage={hasFilters ? "No entries match these filters. Clear them or choose a wider period." : undefined}
+          emptyMessage={historyLoading && !history ? "Loading entries…" : hasFilters ? "No entries match these filters. Clear them or choose a wider period." : "No entries this month yet. Start a timer above, or choose another month."}
         />
       </section>
 

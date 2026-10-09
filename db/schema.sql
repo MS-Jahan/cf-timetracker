@@ -78,10 +78,11 @@ CREATE TABLE IF NOT EXISTS project_tasks (
 );
 
 -- Indices for rapid filtering
-CREATE INDEX IF NOT EXISTS idx_entries_customer ON time_entries(customer_id);
-CREATE INDEX IF NOT EXISTS idx_entries_project ON time_entries(project_id);
-CREATE INDEX IF NOT EXISTS idx_entries_start ON time_entries(start_time);
-CREATE INDEX IF NOT EXISTS idx_entries_activity ON time_entries(activity_id);
+-- Composite indexes for keyset paging and filtered ledgers (see docs/2026-10-09-read-scaling-plan.md).
+CREATE INDEX IF NOT EXISTS idx_entries_start_id ON time_entries(start_time, id);
+CREATE INDEX IF NOT EXISTS idx_entries_customer_start ON time_entries(customer_id, start_time, id);
+CREATE INDEX IF NOT EXISTS idx_entries_project_start ON time_entries(project_id, start_time, id);
+CREATE INDEX IF NOT EXISTS idx_entries_activity_start ON time_entries(activity_id, start_time, id);
 CREATE INDEX IF NOT EXISTS idx_entries_running ON time_entries(is_running);
 CREATE INDEX IF NOT EXISTS idx_project_tasks_project ON project_tasks(project_id);
 

@@ -14,6 +14,7 @@ import {
   getProjectDetail,
   getActivityDetail,
   isValidMonth,
+  entryBounds,
   listEntries,
   listProjectTasks,
   monthRange,
@@ -400,9 +401,19 @@ async function route(request, env) {
         ...(fromMs !== null ? { fromMs: Number(fromMs), toMs: Number(toMs) } : {}),
         limit: Number(url.searchParams.get("limit") || 50),
         offset: Number(url.searchParams.get("offset") || 0),
+        customerId: url.searchParams.get("customerId") || undefined,
+        projectId: url.searchParams.get("projectId") || undefined,
+        activityId: url.searchParams.get("activityId") || undefined,
+        before: url.searchParams.get("before") || undefined,
+        lean: url.searchParams.get("lean") === "1",
       });
       if (result.status !== "ok") return jsonResponse(request, env, { error: result.error }, 400);
       return jsonResponse(request, env, result);
+    }
+
+    // 7b. Earliest/latest entry start, for period pickers (2 index lookups).
+    if (method === "GET" && pathname === "/api/entries/bounds") {
+      return jsonResponse(request, env, await entryBounds(env));
     }
 
     // 8c. Project tasks - the task list of one project (with default flags).
