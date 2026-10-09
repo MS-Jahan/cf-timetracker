@@ -5,6 +5,7 @@
 import {
   bumpDataRev,
   getDataRev,
+  withVersion,
   addProjectTask,
   createActivity,
   createCustomer,
@@ -81,13 +82,54 @@ async function readJson(request) {
   }
 }
 
+/** Error body for entry edits: carries `code` and the latest `entry` on an `entry_changed` conflict. */
+const entryError = (result) => ({
+  error: result.error,
+  ...(result.code ? { code: result.code } : {}),
+  ...(result.entry ? { entry: result.entry } : {}),
+});
+
 /** Requests that never change stored data (POST routes that only compute or forward). */
 const NON_MUTATING_POSTS = new Set(["/api/voice/parse", "/api/sync/google-sheets"]);
 
+/** GETs that must always hit the Worker (they are the freshness probe itself or static). */
+const UNCACHED_GETS = new Set(["/api/rev", "/api/demo/status"]);
+
+/** Same rule as the gate inside route(): Access header or matching X-App-Token. */
+function isAuthorized(request, env, pathname) {
+  if (!env.APP_TOKEN || !pathname.startsWith("/api/")) return true;
+  return Boolean(request.headers.get("Cf-Access-Authenticated-User-Email")) || request.headers.get("X-App-Token") === env.APP_TOKEN;
+}
+
 export default {
   async fetch(request, env) {
-    const response = await route(request, env);
     const { pathname } = new URL(request.url);
+
+    // Conditional reads (docs/2026-10-09-read-scaling-plan.md, phase 3): every successful
+    // mutation bumps data_rev, so "rev-N" is a valid ETag for any GET until the next write.
+    // A matching If-None-Match answers 304 after reading one settings row instead of
+    // re-running the queries. rev 0 (no counter row / unreadable) disables the mechanism
+    // so a broken counter can never serve stale data. The rev is read BEFORE the data, so
+    // a racing write can only make the ETag older than the body (an extra revalidation).
+    let etag = null;
+    if (request.method === "GET" && pathname.startsWith("/api/") && !UNCACHED_GETS.has(pathname) && isAuthorized(request, env, pathname)) {
+      const rev = await getDataRev(env);
+      if (rev > 0) {
+        etag = `"rev-${rev}"`;
+        if (request.headers.get("If-None-Match") === etag) {
+          return new Response(null, {
+            status: 304,
+            headers: { ETag: etag, "Cache-Control": "no-cache", ...JSON_HEADERS_BASE, "Access-Control-Allow-Origin": corsOrigin(request, env) },
+          });
+        }
+      }
+    }
+
+    const response = await route(request, env);
+    if (etag && response.status === 200) {
+      response.headers.set("ETag", etag);
+      response.headers.set("Cache-Control", "no-cache");
+    }
     const mutating =
       request.method !== "GET" && request.method !== "OPTIONS" && pathname.startsWith("/api/") && !NON_MUTATING_POSTS.has(pathname);
     if (mutating && response.status < 400) await bumpDataRev(env);
@@ -164,7 +206,7 @@ async function route(request, env) {
       return jsonResponse(request, env, {
         dataRev: await getDataRev(env),
         activeTimer: activeTimer || null,
-        entries: recentEntries.results || [],
+        entries: (recentEntries.results || []).map(withVersion),
         customers: customers.results || [],
         projects: projects.results || [],
         activities: activities.results || [],
@@ -351,14 +393,14 @@ async function route(request, env) {
       if (!body) return jsonResponse(request, env, { error: "Invalid JSON body" }, 400);
       const result = await updateTimeEntry(env, entryMatch.id, body);
       if (result.status !== "ok") {
-        return jsonResponse(request, env, { error: result.error }, STATUS_CODES[result.status] || 400);
+        return jsonResponse(request, env, entryError(result), STATUS_CODES[result.status] || 400);
       }
       return jsonResponse(request, env, { success: true, entry: result.entry });
     }
     if (method === "DELETE" && entryMatch?.id) {
-      const result = await deleteTimeEntry(env, entryMatch.id);
+      const result = await deleteTimeEntry(env, entryMatch.id, { ifVersion: url.searchParams.get("ifVersion") ?? undefined });
       if (result.status !== "ok") {
-        return jsonResponse(request, env, { error: result.error }, STATUS_CODES[result.status] || 404);
+        return jsonResponse(request, env, entryError(result), STATUS_CODES[result.status] || 404);
       }
       return jsonResponse(request, env, { success: true });
     }

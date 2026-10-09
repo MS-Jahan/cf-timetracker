@@ -59,6 +59,8 @@ export default function EntryEditor({ entry, customers, projects, activities, bu
       startTime: startMs,
       hourlyRate: Number(draft.hourlyRate),
     };
+    // Only apply the edit if nobody changed this entry since it was loaded.
+    if (entry.version) patch.ifVersion = entry.version;
     // Blank end on a running entry keeps the clock running; a filled one stops it.
     if (!keepsRunning) patch.endTime = endMs;
     onSave(patch);

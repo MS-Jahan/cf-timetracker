@@ -55,6 +55,27 @@ export async function resolveRate(env, projectId, customerId, hourlyRate) {
   return cust?.hourly_rate ?? 0;
 }
 
+/**
+ * Opaque version of an entry's stored fields (FNV-1a hash, no schema column needed).
+ * Clients echo it back as `ifVersion` when editing/deleting so a change made on another
+ * device is detected instead of silently overwritten (phase 4 of the read-scaling plan).
+ */
+export function entryVersion(row) {
+  const text = JSON.stringify([
+    row.customer_id, row.project_id, row.activity_id, row.description ?? "", row.tags ?? "",
+    row.start_time, row.end_time ?? null, row.duration_seconds ?? 0, row.rate_applied ?? 0,
+    row.cost ?? 0, row.currency ?? null, row.is_running ? 1 : 0,
+  ]);
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, "0");
+}
+
+export const withVersion = (row) => (row ? { ...row, version: entryVersion(row) } : row);
+
 /** Billing currency recorded on an entry: project override, else the client's. */
 export async function resolveCurrency(env, projectId, customerId) {
   const row = await env.DB.prepare(
@@ -641,7 +662,7 @@ export async function getClientDetail(env, id, { limit = 50, offset = 0 } = {}) 
     status: "ok",
     customer,
     projects: projects.results || [],
-    entries: entries.results || [],
+    entries: (entries.results || []).map(withVersion),
     totals: {
       entry_count: totals?.entry_count || 0,
       total_seconds: Math.round(totals?.total_seconds || 0),
@@ -717,7 +738,7 @@ export async function getProjectDetail(env, id, { limit = 50, offset = 0 } = {})
   return {
     status: "ok",
     project,
-    entries: entries.results || [],
+    entries: (entries.results || []).map(withVersion),
     totals: {
       entry_count: totals?.entry_count || 0,
       total_seconds: Math.round(totals?.total_seconds || 0),
@@ -774,7 +795,7 @@ export async function getActivityDetail(env, id, { limit = 50, offset = 0 } = {}
   return {
     status: "ok",
     activity,
-    entries: entries.results || [],
+    entries: (entries.results || []).map(withVersion),
     totals: {
       entry_count: totals?.entry_count || 0,
       total_seconds: Math.round(totals?.total_seconds || 0),
@@ -981,7 +1002,7 @@ export async function listEntries(
 
   const rows = entries.results || [];
   const hasMore = rows.length > maxLimit;
-  const page = hasMore ? rows.slice(0, maxLimit) : rows;
+  const page = (hasMore ? rows.slice(0, maxLimit) : rows).map(withVersion);
   const last = page[page.length - 1];
 
   return {
@@ -1201,7 +1222,7 @@ export async function createTimeEntry(env, body = {}) {
   `).bind(id, customerId, projectId, activityId, description, tags, startTime, endTime, durationSeconds, applied, cost, currency).run();
 
   const entry = await env.DB.prepare("SELECT * FROM time_entries WHERE id = ?").bind(id).first();
-  return { status: "ok", entry };
+  return { status: "ok", entry: withVersion(entry) };
 }
 
 /**
@@ -1212,12 +1233,25 @@ export async function createTimeEntry(env, body = {}) {
  * duration/cost are written in the same guarded UPDATE (`WHERE ... AND is_running = 1`
  * plus a changes check), so two concurrent stop-edits cannot both succeed.
  */
-export async function updateTimeEntry(env, id, patch = {}) {
+function changedElsewhere(current) {
+  return {
+    status: "conflict",
+    code: "entry_changed",
+    error: "This entry was changed on another device. Review the latest version and try again.",
+    entry: withVersion(current),
+  };
+}
+
+export async function updateTimeEntry(env, id, fullPatch = {}) {
+  // `ifVersion` is a precondition, not a field: when present, the edit only applies if the
+  // entry still has the version the client loaded (409 `entry_changed` otherwise).
+  const { ifVersion, ...patch } = fullPatch;
   const unknown = Object.keys(patch).filter((key) => !ENTRY_FIELDS.has(key));
   if (unknown.length) return { status: "invalid", error: `Unknown fields: ${unknown.join(", ")}` };
 
   const current = await env.DB.prepare("SELECT * FROM time_entries WHERE id = ?").bind(id).first();
   if (!current) return { status: "not_found", error: "Time entry not found" };
+  if (ifVersion !== undefined && ifVersion !== null && ifVersion !== entryVersion(current)) return changedElsewhere(current);
   if (!Object.keys(patch).length) return { status: "invalid", error: "No updatable fields provided" };
 
   const customerId = patch.customerId ?? current.customer_id;
@@ -1301,7 +1335,7 @@ export async function updateTimeEntry(env, id, patch = {}) {
     }
     return {
       status: "ok",
-      entry: await env.DB.prepare("SELECT * FROM time_entries WHERE id = ?").bind(id).first(),
+      entry: withVersion(await env.DB.prepare("SELECT * FROM time_entries WHERE id = ?").bind(id).first()),
     };
   }
 
@@ -1325,14 +1359,15 @@ export async function updateTimeEntry(env, id, patch = {}) {
 
   return {
     status: "ok",
-    entry: await env.DB.prepare("SELECT * FROM time_entries WHERE id = ?").bind(id).first(),
+    entry: withVersion(await env.DB.prepare("SELECT * FROM time_entries WHERE id = ?").bind(id).first()),
   };
 }
 
 /** Hard-delete a closed entry. The running row is the live timer and must be stopped first. */
-export async function deleteTimeEntry(env, id) {
-  const current = await env.DB.prepare("SELECT is_running FROM time_entries WHERE id = ?").bind(id).first();
+export async function deleteTimeEntry(env, id, { ifVersion } = {}) {
+  const current = await env.DB.prepare("SELECT * FROM time_entries WHERE id = ?").bind(id).first();
   if (!current) return { status: "not_found", error: "Time entry not found" };
+  if (ifVersion !== undefined && ifVersion !== null && ifVersion !== entryVersion(current)) return changedElsewhere(current);
   if (current.is_running) return { status: "conflict", error: "Stop the timer before deleting this entry" };
 
   await env.DB.prepare("DELETE FROM time_entries WHERE id = ? AND is_running = 0").bind(id).run();

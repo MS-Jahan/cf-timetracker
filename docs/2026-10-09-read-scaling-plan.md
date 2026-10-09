@@ -1,6 +1,6 @@
 # Read scaling and multi-device freshness plan (2026-10-09)
 
-Status: **Phase 1 shipped in 0.18.1, Phase 2 in 0.19.0**; phases 3-4 are plans only. Phases ship as separate releases under `docs/2026-10-09-versioning.md`.
+Status: **Phase 1 shipped in 0.18.1, Phase 2 in 0.19.0, Phases 3-4 in 0.20.0.** Remaining ideas are listed under "Not built". Phases ship as separate releases under `docs/2026-10-09-versioning.md`.
 
 ## 1. Why
 
@@ -75,13 +75,17 @@ Original plan:
 6. Print (`PrintPage.jsx`) and CSV export use the same period query instead of `fetchAllEntries()`.
 - Expected at 11k entries: Time entries open ~1M -> ~200 rows.
 
-### Phase 3 - do not repeat identical reads (minor, 0.20.0)
+### Phase 3 - do not repeat identical reads (minor, 0.20.0) - DONE (items 1 only)
+Implementation notes: the router wrapper in `worker/src/index.js` reads `data_rev` before any GET (after the same auth rule as the gate), answers `304` on a matching `If-None-Match`, and otherwise adds `ETag: "rev-N"` + `Cache-Control: no-cache` to the 200. Browser check: reloads of bootstrap/entries/bounds returned `304 Not Modified` from the local worker. Caveat: writes made outside the API do not bump the counter (see AGENTS.md for the bump SQL). Items 2-3 below were deliberately not built (see "Not built").
+Original plan:
 1. `ETag: "rev-<data_rev>"` on bootstrap, entries, summary, dashboard, detail endpoints; `If-None-Match` hit -> 304 after reading `data_rev` only.
 2. Workers Cache API for dashboard/bootstrap responses keyed by URL + `data_rev` (per-colo; never stale because the key changes on write). Respect Access/APP_TOKEN: cache only after auth passes, key includes nothing user-specific (single-tenant).
 3. If all-time dashboard is still heavy: `daily_totals(day, customer_id, project_id, activity_id, currency, seconds, cost, entries)` maintained in `core.js` on every write (and rebuilt by a script); dashboard reads rollups. Decide with D1 metrics after 3.1-3.2.
 - Expected: revisit with no changes = 1 row read; dashboard reload = 1 row when cached.
 
-### Phase 4 - safe concurrent edits (patch)
+### Phase 4 - safe concurrent edits (patch) - DONE (0.20.0)
+Implementation notes: no schema change. `version` is an FNV-1a hash of the entry's stored fields (`entryVersion` in `core.js`), added to entry objects; `ifVersion` is a precondition on PATCH and DELETE (`?ifVersion=`). Conflict -> 409 `{ code: "entry_changed", entry }`; the editor reloads and reopens on the latest entry. The compare-then-UPDATE window is not transactional (acceptable for one person on a few devices). A deleted entry still answers 404.
+Original plan:
 1. `time_entries.updated_at` (or `version` integer) set on every write.
 2. `PATCH /api/entries/:id` accepts `ifVersion`; mismatch -> 409 `{ code: "entry_changed" }`; editor shows "changed on another device - reload". Additive: omitted `ifVersion` keeps last-write-wins for old clients.
 
@@ -96,3 +100,8 @@ Original plan:
 - Multi-user / per-user data (single-tenant app).
 - Real-time push (WebSockets/Durable Objects): the focus/visibility rev check is enough for one person on a few devices.
 - Currency conversion for mixed-currency dashboard totals (see `2026-10-09-entry-currency.md`).
+
+## 7. Not built (decisions)
+- **Workers Cache API keyed by `data_rev`:** the Cache API does nothing on `*.workers.dev` hostnames (the demo) and ETag/304 already removes the repeated queries for the same browser; a second device would still pay one cold read per URL per revision, which is cheap. Revisit if a custom-domain deployment shows cold-read cost in D1 metrics.
+- **Daily rollup table for the dashboard:** the period-scoped dashboard queries use the new composite indexes; adding a write-time rollup (and its drift risk) is not justified until a real all-time dashboard load shows up as expensive in D1 metrics. The first step then is an `EXPLAIN QUERY PLAN` review of `queryDashboard`.
+- **Warning before printing "All months" (E12)** and **always showing a running entry that began before the selected month (E15):** low value for one user; the timer bar above the ledger already shows the running entry.

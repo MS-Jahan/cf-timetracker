@@ -130,14 +130,35 @@ export default function TrackerPage({ tracker }) {
       "Entry duplicated."
     );
 
+  /**
+   * Another device changed (or deleted) this entry after it was loaded: reload and, when the
+   * worker returned the latest version, reopen the editor on it so nothing is overwritten blindly.
+   */
+  const handleEntryConflict = async (result, reopen) => {
+    await load();
+    reloadHistory();
+    if (reopen && result.entry) setEditingEntry(enrichEntries([result.entry], lookup)[0]);
+    else setEditingEntry(null);
+    addNotice(
+      reopen && result.entry
+        ? "This entry was changed on another device. The latest version is loaded - review it and save again."
+        : "This entry was changed on another device, so nothing was deleted. The list is up to date; try again if you still want to."
+    );
+  };
+
   const saveEntry = async (patch) => {
     const result = await runAction(() => updateTimeEntry(editingEntry.id, patch), editingEntry.is_running && patch.endTime === undefined ? "Running entry updated." : "Entry updated.");
     if (result.ok) setEditingEntry(null);
+    else if (result.code === "entry_changed") await handleEntryConflict(result, true);
   };
 
   const confirmDelete = async () => {
-    const result = await runAction(() => deleteTimeEntry(deletingEntry.id), "Entry deleted.");
+    const result = await runAction(() => deleteTimeEntry(deletingEntry.id, deletingEntry.version), "Entry deleted.");
     if (result.ok) setDeletingEntry(null);
+    else if (result.code === "entry_changed") {
+      setDeletingEntry(null);
+      await handleEntryConflict(result, false);
+    }
   };
 
   const filtered = useMemo(() => (history ? enrichEntries(history, lookup) : []), [history, lookup]);

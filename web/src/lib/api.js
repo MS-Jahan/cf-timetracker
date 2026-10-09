@@ -25,6 +25,8 @@ async function request(path, options = {}) {
     error.status = res.status;
     // Machine-readable reason from the worker, e.g. "timer_running" / "no_active_timer".
     if (data.code) error.code = data.code;
+    // On `entry_changed` the worker returns the latest stored entry for a quick re-review.
+    if (data.entry) error.entry = data.entry;
     throw error;
   }
   return data;
@@ -111,8 +113,8 @@ export const updateTimeEntry = (id, payload) =>
 export const createTimeEntry = (payload) =>
   request("/api/entries", { method: "POST", body: JSON.stringify(payload) });
 
-export const deleteTimeEntry = (id) =>
-  request(`/api/entries/${encodeURIComponent(id)}`, { method: "DELETE" });
+export const deleteTimeEntry = (id, ifVersion) =>
+  request(`/api/entries/${encodeURIComponent(id)}${ifVersion ? `?ifVersion=${encodeURIComponent(ifVersion)}` : ""}`, { method: "DELETE" });
 
 /**
  * One page of history. Optional: half-open [fromMs, toMs) range, client/project/activity

@@ -75,7 +75,7 @@ export function useTracker() {
       return { ok: true, code: null, message: null };
     } catch (err) {
       setActionError(err.message);
-      return { ok: false, code: err.code || null, message: err.message };
+      return { ok: false, code: err.code || null, message: err.message, entry: err.entry || null };
     } finally {
       setBusy(false);
     }

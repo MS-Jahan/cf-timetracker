@@ -7,7 +7,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { deleteTimeEntry, updateTimeEntry } from "../src/core.js";
+import { deleteTimeEntry, entryVersion, updateTimeEntry } from "../src/core.js";
 
 const ENTRY_ID = "e0000000-0000-4000-8000-000000000001";
 const CUSTOMER_ID = "c0000000-0000-4000-8000-000000000001";
@@ -207,5 +207,48 @@ describe("entry currency on edit", () => {
     const result = await updateTimeEntry(env, ENTRY_ID, { projectId: "p0000000-0000-4000-8000-000000000002" });
     assert.equal(result.status, "ok");
     assert.equal(env.DB.updates[0].args[10], "EUR");
+  });
+});
+
+describe("edit conflicts (ifVersion)", () => {
+  it("versions change when any stored field changes and are stable otherwise", () => {
+    const base = closedRow();
+    assert.equal(entryVersion(base), entryVersion({ ...base }));
+    assert.notEqual(entryVersion(base), entryVersion({ ...base, description: "other" }));
+    assert.notEqual(entryVersion(base), entryVersion({ ...base, rate_applied: 101 }));
+    assert.notEqual(entryVersion(base), entryVersion({ ...base, end_time: base.end_time + 1 }));
+  });
+
+  it("applies the edit when ifVersion matches", async () => {
+    const current = closedRow();
+    const env = stubDb({ current });
+    const result = await updateTimeEntry(env, ENTRY_ID, { description: "ok", ifVersion: entryVersion(current) });
+    assert.equal(result.status, "ok");
+    assert.equal(env.DB.updates.length, 1);
+    assert.ok(result.entry.version, "responses carry the new version");
+  });
+
+  it("answers entry_changed with the latest entry and does not write when ifVersion is stale", async () => {
+    const current = closedRow({ description: "edited on device B" });
+    const env = stubDb({ current });
+    const result = await updateTimeEntry(env, ENTRY_ID, { description: "from device A", ifVersion: entryVersion(closedRow()) });
+    assert.equal(result.status, "conflict");
+    assert.equal(result.code, "entry_changed");
+    assert.equal(result.entry.description, "edited on device B");
+    assert.equal(env.DB.updates.length, 0);
+  });
+
+  it("keeps last-write-wins when ifVersion is omitted (older clients)", async () => {
+    const env = stubDb({ current: closedRow({ description: "changed elsewhere" }) });
+    const result = await updateTimeEntry(env, ENTRY_ID, { description: "mine" });
+    assert.equal(result.status, "ok");
+  });
+
+  it("refuses to delete a stale entry", async () => {
+    const env = stubDb({ current: closedRow({ rate_applied: 999 }) });
+    const result = await deleteTimeEntry(env, ENTRY_ID, { ifVersion: entryVersion(closedRow()) });
+    assert.equal(result.status, "conflict");
+    assert.equal(result.code, "entry_changed");
+    assert.equal(env.DB.deleted(), false);
   });
 });
