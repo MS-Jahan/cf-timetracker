@@ -65,6 +65,21 @@ export function longDate(ms) {
   return `${d.getDate()} ${MONTHS_LONG[d.getMonth()]} ${d.getFullYear()}`;
 }
 
+/**
+ * Compact local date range for printed reports (en dash):
+ * "28 - 30 September 2026", "28 Sep - 4 Oct 2026", "28 Dec 2025 - 3 Jan 2026".
+ */
+export function formatPeriod(startMs, endMs) {
+  const a = new Date(Math.min(startMs, endMs));
+  const b = new Date(Math.max(startMs, endMs));
+  const [ad, am, ay, bd, bm, by] = [a.getDate(), a.getMonth(), a.getFullYear(), b.getDate(), b.getMonth(), b.getFullYear()];
+  if (ay === by && am === bm) {
+    return ad === bd ? `${ad} ${MONTHS_LONG[am]} ${ay}` : `${ad} \u2013 ${bd} ${MONTHS_LONG[am]} ${ay}`;
+  }
+  if (ay === by) return `${ad} ${MONTHS[am]} \u2013 ${bd} ${MONTHS[bm]} ${ay}`;
+  return `${ad} ${MONTHS[am]} ${ay} \u2013 ${bd} ${MONTHS[bm]} ${by}`;
+}
+
 /** UTC month key (YYYY-MM) for an epoch-ms timestamp. */
 export function utcMonth(ms) {
   return new Date(ms).toISOString().slice(0, 7);

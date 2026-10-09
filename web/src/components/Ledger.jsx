@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { formatDuration, formatMoney, longDate, longMonth, shortDate, shortDateTime, toHours } from "../lib/format.js";
+import { formatDuration, formatMoney, formatPeriod, longDate, longMonth, shortDate, shortDateTime, toHours } from "../lib/format.js";
 import { formatDate, getDateFormat } from "../lib/dateFormat.js";
 import Icon from "./Icon.jsx";
 import { Link } from "../lib/router.jsx";
@@ -172,16 +172,22 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, onDupl
   const mixedCurrencies = new Set(closed.map((e) => e.currency || "?")).size > 1;
   const summary = buildSummary(entries);
 
-  // "2026-10" -> "October 2026"; no explicit scope -> the entries' month or date range.
+  // Explicit month filter -> "October 2026"; otherwise the entries' span: a whole
+  // month by name, anything else as a compact range (see docs/2026-10-09-print-period-label.md).
   const period = (() => {
-    if (scopeLabel) return scopeLabel.replace(/\b(\d{4}-\d{2})\b/g, (m) => longMonth(m));
-    if (!closed.length) return "No entries";
-    const first = new Date(Math.min(...closed.map((e) => e.start_time)));
-    const last = new Date(Math.max(...closed.map((e) => e.start_time)));
-    if (first.getFullYear() === last.getFullYear() && first.getMonth() === last.getMonth()) {
-      return longMonth(`${first.getFullYear()}-${first.getMonth() + 1}`);
+    if (scopeLabel && /\b\d{4}-\d{2}\b/.test(scopeLabel)) return scopeLabel.replace(/\b(\d{4}-\d{2})\b/g, (m) => longMonth(m));
+    let range = "";
+    if (closed.length) {
+      const first = new Date(Math.min(...closed.map((e) => e.start_time)));
+      const last = new Date(Math.max(...closed.map((e) => e.start_time)));
+      const sameMonth = first.getFullYear() === last.getFullYear() && first.getMonth() === last.getMonth();
+      const lastDay = new Date(last.getFullYear(), last.getMonth() + 1, 0).getDate();
+      range = sameMonth && first.getDate() === 1 && last.getDate() === lastDay
+        ? longMonth(`${first.getFullYear()}-${first.getMonth() + 1}`)
+        : formatPeriod(first.getTime(), last.getTime());
     }
-    return `${longDate(first.getTime())} to ${longDate(last.getTime())}`;
+    if (scopeLabel) return range ? `${scopeLabel} \u00b7 ${range}` : scopeLabel;
+    return range || "No entries";
   })();
 
   const generatedDate = longDate(Date.now());
@@ -190,7 +196,7 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, onDupl
   // Browsers name the saved PDF after the page title while printing.
   useEffect(() => {
     let previous = null;
-    const before = () => { previous = document.title; document.title = `${period} - CF-Time Tracker`; };
+    const before = () => { previous = document.title; document.title = `${period} - cf-timetracker`; };
     const after = () => { if (previous !== null) document.title = previous; previous = null; };
     window.addEventListener("beforeprint", before);
     window.addEventListener("afterprint", after);
@@ -226,11 +232,11 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, onDupl
       {/* Print-only header: CF Time Tracker branding + period info */}
       <header className="print-header">
         <div style={{ display: "flex", alignItems: "center", gap: "4mm" }}>
-          <img src="/logo.png" alt="CF-Time Tracker" className="print-logo" />
+          <img src="/logo.png" alt="cf-timetracker" className="print-logo" />
           <div>
             <h1>
-              <span className="print-brand-cf">CF</span>
-              <span className="print-brand-rest">-Time Tracker</span>
+              <span className="print-brand-cf">cf</span>
+              <span className="print-brand-rest">-timetracker</span>
             </h1>
             <p className="print-meta">
               Billable hours report{mixedCurrencies ? " (mixed currencies)" : ""}
@@ -319,7 +325,7 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, onDupl
               </tr>
               {/* Inside the table so it can never be pushed alone onto a fresh page. */}
               <tr className="print-footer-row">
-                <td colSpan={6}>CF-Time Tracker - Timesheet printed on {generatedDate}</td>
+                <td colSpan={6}>cf-timetracker - Timesheet printed on {generatedDate}</td>
               </tr>
             </tbody>
           </table>
