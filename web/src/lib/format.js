@@ -36,6 +36,21 @@ export function utcDate(ms) {
   return new Date(ms).toISOString().slice(0, 10);
 }
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const pad2 = (n) => String(n).padStart(2, "0");
+
+/** Short local date for printed reports: "30 Sep". */
+export function shortDate(ms) {
+  const d = new Date(ms);
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+}
+
+/** Short local date + 24h time for printed reports: "30 Sep 14:05". */
+export function shortDateTime(ms) {
+  const d = new Date(ms);
+  return `${shortDate(ms)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
 /** UTC month key (YYYY-MM) for an epoch-ms timestamp. */
 export function utcMonth(ms) {
   return new Date(ms).toISOString().slice(0, 7);

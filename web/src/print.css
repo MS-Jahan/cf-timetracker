@@ -13,7 +13,8 @@
   display: none;
 }
 
-.print-summary {
+.print-summary,
+.print-details {
   display: none;
 }
 
@@ -73,8 +74,6 @@
   }
 
   /* Amounts keep their full "BDT 250.00" text instead of wrapping. */
-  .print-entries-table td.text-right,
-  .print-entries-table th.text-right,
   .print-summary td.text-right,
   .print-summary th.text-right {
     white-space: nowrap;
@@ -172,93 +171,87 @@
     border-top: 2px solid #000;
   }
 
-  /* Entries table */
-  .print-entries {
-    page-break-before: auto;
+  /* Section headings (Summary / Details) */
+  .print-section-title {
+    font-size: 12pt;
+    font-weight: 600;
+    margin: 0 0 2mm 0;
   }
 
-  table.print-entries-table {
+  /* Details table: full frame, light row rules, header repeats per page. */
+  .print-details {
+    display: block !important;
+  }
+
+  table.print-details-table {
     width: 100%;
     border-collapse: collapse;
     table-layout: fixed;
+    border: 1px solid #000;
   }
 
-  table.print-entries-table thead {
+  table.print-details-table thead {
     display: table-header-group;
   }
 
-  table.print-entries-table tr {
-    page-break-inside: avoid;
+  table.print-details-table tr {
+    break-inside: avoid;
     background: #fff !important;
   }
 
-  table.print-entries-table th,
-  table.print-entries-table td {
-    border-bottom: 1px solid #ccc;
+  table.print-details-table th,
+  table.print-details-table td {
     padding: 1.5mm 2mm;
-    font-size: 9pt;
+    font-size: 8.5pt;
     text-align: left;
-    word-wrap: break-word;
-    overflow-wrap: break-word;
+    vertical-align: top;
+    border-bottom: 1px solid #ccc;
+    overflow-wrap: anywhere;
   }
 
-  table.print-entries-table th {
-    border-bottom: 2px solid #000;
+  table.print-details-table th {
+    background: #f0f0f0 !important;
     font-weight: 600;
-    background: #f8f8f8 !important;
+    border-bottom: 1px solid #000;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
 
-  table.print-entries-table td.text-right,
-  table.print-entries-table th.text-right {
+  table.print-details-table td.text-right,
+  table.print-details-table th.text-right {
     text-align: right;
+    white-space: nowrap;
+    font-family: monospace;
   }
 
-  table.print-entries-table td.text-center,
-  table.print-entries-table th.text-center {
-    text-align: center;
+  table.print-details-table tbody tr:last-child td {
+    border-bottom: 1px solid #000;
   }
 
-  table.print-entries-table tfoot td {
+  table.print-details-table tfoot td {
+    font-weight: 700;
     border-top: 2px solid #000;
     border-bottom: none;
-    font-weight: 700;
-    padding-top: 2mm;
-    color: #000 !important;
   }
 
-  .print-summary tfoot td {
-    border-top: 2px solid #000;
-    border-bottom: none;
-    font-weight: 700;
+  .print-sub {
+    color: #555;
+    font-size: 8pt;
   }
 
-  /* No double rule between the last entry and the total row. */
-  .print-entries-table tbody tr:last-child td,
-  .print-summary tbody tr:last-child td {
-    border-bottom: none;
-  }
+  table.print-details-table col.col-d-date { width: 9%; }
+  table.print-details-table col.col-d-time { width: 16%; }
+  table.print-details-table col.col-d-what { width: 24%; }
+  table.print-details-table col.col-d-note { width: 27%; }
+  table.print-details-table col.col-d-dur { width: 11%; }
+  table.print-details-table col.col-d-total { width: 13%; }
 
-  /* Column widths for print */
-  table.print-entries-table col.col-date { width: 12%; }
-  table.print-entries-table col.col-client { width: 14%; }
-  table.print-entries-table col.col-project { width: 14%; }
-  table.print-entries-table col.col-task { width: 12%; }
-  table.print-entries-table col.col-duration { width: 10%; }
-  table.print-entries-table col.col-rate { width: 10%; }
-  table.print-entries-table col.col-total { width: 10%; }
-  table.print-entries-table col.col-note { width: 18%; }
-
-  /* Footer - fixed within the page box so Chromium repeats it on every
-     printed page of a multi-page timesheet. */
+  /* Footer sits in normal flow, under the details table. */
   .print-footer {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
     display: block !important;
+    margin-top: 6mm;
     padding-top: 3mm;
+    border-top: 1px solid #999;
     font-size: 8pt;
     color: #666;
     text-align: center;
@@ -289,13 +282,5 @@
       padding: 1.5mm 2mm;
     }
     
-    table.print-entries-table th,
-    table.print-entries-table td {
-      font-size: 7.5pt;
-      padding: 1mm 1.5mm;
-    }
-    
-    table.print-entries-table col.col-note { display: none; }
-    table.print-entries-table td:last-child { display: none; }
   }
 }

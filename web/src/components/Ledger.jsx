@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { formatDuration, formatMoney, toHours, utcDate } from "../lib/format.js";
+import { formatDuration, formatMoney, shortDate, shortDateTime, toHours, utcDate } from "../lib/format.js";
 import Icon from "./Icon.jsx";
 import { Link } from "../lib/router.jsx";
 
@@ -202,7 +202,7 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, onDupl
       {/* Print-only summary table */}
       {summary.length > 0 && (
         <div className="print-summary">
-          <h2 style={{ fontSize: "12pt", fontWeight: 600, margin: "0 0 2mm 0" }}>Summary by Client & Project</h2>
+          <h2 className="print-section-title">Summary by Client & Project</h2>
           <table>
             <thead>
               <tr>
@@ -236,9 +236,68 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, onDupl
         </div>
       )}
 
+      {/* Print-only details table: own colgroup so widths survive print. */}
+      {closed.length > 0 && (
+        <div className="print-details">
+          <h2 className="print-section-title">Details</h2>
+          <table className="print-details-table">
+            <colgroup>
+              <col className="col-d-date" />
+              <col className="col-d-time" />
+              <col className="col-d-what" />
+              <col className="col-d-note" />
+              <col className="col-d-dur" />
+              <col className="col-d-total" />
+            </colgroup>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Start / Stop</th>
+                <th>Project / Task</th>
+                <th>Note</th>
+                <th className="text-right">Duration</th>
+                <th className="text-right">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {closed.map((e) => (
+                <tr key={e.id}>
+                  <td>{shortDate(e.start_time)}</td>
+                  <td>
+                    {shortDateTime(e.start_time)}
+                    <br />
+                    {e.end_time ? shortDateTime(e.end_time) : "-"}
+                  </td>
+                  <td>
+                    <strong>{e.project_name || "-"}</strong>
+                    <br />
+                    <span className="print-sub">
+                      {e.customer_name || "-"} · {e.activity_name || "-"}
+                    </span>
+                  </td>
+                  <td>
+                    {e.description || ""}
+                    {e.tags ? <span className="print-sub"> [{String(e.tags).split(",").map((t) => t.trim()).filter(Boolean).join(", ")}]</span> : null}
+                  </td>
+                  <td className="text-right">{formatDuration(e.duration_seconds)}</td>
+                  <td className="text-right">{formatMoney(e.cost, e.currency || currency)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colSpan={4}>Total</td>
+                <td className="text-right">{formatDuration(totalSeconds)}</td>
+                <td className="text-right">{formatMoney(totalCost, currency)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+
       {/* Screen: min-width keeps columns from wrapping; narrow screens scroll. */}
-      <div className="overflow-x-auto">
-        <table className="table table-sm min-w-[52rem] print-entries-table">
+      <div className="no-print overflow-x-auto">
+        <table className="table table-sm min-w-[52rem]">
           <colgroup className="no-print">
             <col />
             <col />
@@ -351,7 +410,7 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, onDupl
 
       {/* Print-only footer */}
       <div className="print-footer">
-        CF Time Tracker - Timesheet printed on {generatedDate} - {closed.length} entries, {toHours(totalSeconds)} hours
+        CF Time Tracker - Timesheet printed on {generatedDate}
       </div>
     </section>
   );
