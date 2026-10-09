@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { DATE_FORMATS, getDateFormat, setDateFormat } from "../lib/dateFormat.js";
 import ManagePanel from "../components/ManagePanel.jsx";
 import {
   API_BASE,
@@ -56,6 +57,7 @@ export default function SettingsPage({ themePreference, onThemeChange, demoMode 
     archivedActivities,
   } = useTracker();
 
+  const [dateFormats, setDateFormats] = useState(() => ({ ledger: getDateFormat("ledger"), edit: getDateFormat("edit") }));
   const [gasUrl, setGasUrl] = useState(() => localStorage.getItem(GAS_URL_KEY) || "");
   const [syncPeriod, setSyncPeriod] = useState("all");
 
@@ -73,7 +75,7 @@ export default function SettingsPage({ themePreference, onThemeChange, demoMode 
       <header className="pb-6 pt-8">
         <h1 className="text-xl font-semibold">Settings</h1>
         <p className="ink-muted mt-1 max-w-[70ch] text-sm">
-          Appearance is saved in this browser. Everything else changes the shared database.
+          Appearance and date display are saved in this browser. Everything else changes the shared database.
         </p>
       </header>
 
@@ -100,6 +102,29 @@ export default function SettingsPage({ themePreference, onThemeChange, demoMode 
               <Icon name={themeIcon(option)} size={16} />
               {THEME_LABELS[option]}
             </button>
+          ))}
+        </div>
+      </Section>
+
+      <Section title="Date display" description="Saved in this browser. The ledger column and the entry editor can use different formats.">
+        <div className="flex flex-wrap gap-x-5 gap-y-4">
+          {[["ledger", "Ledger date column"], ["edit", "Edit entry dialog"]].map(([kind, label]) => (
+            <div key={kind}>
+              <label className="field-label" htmlFor={`df-${kind}`}>{label}</label>
+              <select
+                id={`df-${kind}`}
+                className="select"
+                value={dateFormats[kind]}
+                onChange={(e) => {
+                  setDateFormat(kind, e.target.value);
+                  setDateFormats((current) => ({ ...current, [kind]: e.target.value }));
+                }}
+              >
+                {Object.entries(DATE_FORMATS).map(([key, f]) => (
+                  <option key={key} value={key}>{f.label} ({f.hint})</option>
+                ))}
+              </select>
+            </div>
           ))}
         </div>
       </Section>

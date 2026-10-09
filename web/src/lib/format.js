@@ -51,6 +51,20 @@ export function shortDateTime(ms) {
   return `${shortDate(ms)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
+const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+/** "2026-10" -> "October 2026". */
+export function longMonth(yyyymm) {
+  const [y, m] = String(yyyymm).split("-");
+  return MONTHS_LONG[Number(m) - 1] ? `${MONTHS_LONG[Number(m) - 1]} ${y}` : yyyymm;
+}
+
+/** Local long date for printed reports: "9 October 2026". */
+export function longDate(ms) {
+  const d = new Date(ms);
+  return `${d.getDate()} ${MONTHS_LONG[d.getMonth()]} ${d.getFullYear()}`;
+}
+
 /** UTC month key (YYYY-MM) for an epoch-ms timestamp. */
 export function utcMonth(ms) {
   return new Date(ms).toISOString().slice(0, 7);

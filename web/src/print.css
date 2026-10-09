@@ -135,10 +135,40 @@
     margin-top: 1mm;
   }
 
-  .print-header .print-period {
+  /* Brand colours sampled from public/logo.png: orange "CF", navy rest. */
+  .print-brand-cf {
+    color: #f4611b !important;
+  }
+
+  .print-brand-rest {
+    color: #08203e !important;
+  }
+
+  /* Key figures as labelled blocks instead of a pipe-separated line. */
+  .print-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2mm 5mm;
+    margin: 4mm 0 0 0;
+  }
+
+  .print-stats > div {
+    padding-left: 3mm;
+    border-left: 2px solid #f4611b;
+  }
+
+  .print-stats dt {
+    font-size: 7.5pt;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #555;
+  }
+
+  .print-stats dd {
+    margin: 0;
     font-size: 11pt;
     font-weight: 600;
-    margin-top: 2mm;
+    color: #000;
   }
 
   /* Summary table */

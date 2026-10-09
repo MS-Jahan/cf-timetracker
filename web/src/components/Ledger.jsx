@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { formatDuration, formatMoney, shortDate, shortDateTime, toHours, utcDate } from "../lib/format.js";
+import { formatDuration, formatMoney, longDate, longMonth, shortDate, shortDateTime, toHours } from "../lib/format.js";
+import { formatDate, getDateFormat } from "../lib/dateFormat.js";
 import Icon from "./Icon.jsx";
 import { Link } from "../lib/router.jsx";
 
@@ -171,16 +172,30 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, onDupl
   const mixedCurrencies = new Set(closed.map((e) => e.currency || "?")).size > 1;
   const summary = buildSummary(entries);
 
-  const period =
-    scopeLabel ||
-    (closed.length
-      ? `${utcDate(Math.min(...closed.map((e) => e.start_time)))} to ${utcDate(
-          Math.max(...closed.map((e) => e.start_time))
-        )}`
-      : "no entries");
+  // "2026-10" -> "October 2026"; no explicit scope -> the entries' month or date range.
+  const period = (() => {
+    if (scopeLabel) return scopeLabel.replace(/\b(\d{4}-\d{2})\b/g, (m) => longMonth(m));
+    if (!closed.length) return "No entries";
+    const first = new Date(Math.min(...closed.map((e) => e.start_time)));
+    const last = new Date(Math.max(...closed.map((e) => e.start_time)));
+    if (first.getFullYear() === last.getFullYear() && first.getMonth() === last.getMonth()) {
+      return longMonth(`${first.getFullYear()}-${first.getMonth() + 1}`);
+    }
+    return `${longDate(first.getTime())} to ${longDate(last.getTime())}`;
+  })();
 
-  const now = new Date();
-  const generatedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const generatedDate = longDate(Date.now());
+  const ledgerDateFormat = getDateFormat("ledger");
+
+  // Browsers name the saved PDF after the page title while printing.
+  useEffect(() => {
+    let previous = null;
+    const before = () => { previous = document.title; document.title = `${period} - CF-Time Tracker`; };
+    const after = () => { if (previous !== null) document.title = previous; previous = null; };
+    window.addEventListener("beforeprint", before);
+    window.addEventListener("afterprint", after);
+    return () => { window.removeEventListener("beforeprint", before); window.removeEventListener("afterprint", after); after(); };
+  }, [period]);
 
   const detailRow = (e) => (
     <tr key={e.id}>
@@ -211,19 +226,24 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, onDupl
       {/* Print-only header: CF Time Tracker branding + period info */}
       <header className="print-header">
         <div style={{ display: "flex", alignItems: "center", gap: "4mm" }}>
-          <img src="/logo.png" alt="CF Time Tracker" className="print-logo" />
+          <img src="/logo.png" alt="CF-Time Tracker" className="print-logo" />
           <div>
-            <h1>CF Time Tracker</h1>
+            <h1>
+              <span className="print-brand-cf">CF</span>
+              <span className="print-brand-rest">-Time Tracker</span>
+            </h1>
             <p className="print-meta">
               Billable hours report{mixedCurrencies ? " (mixed currencies)" : ""}
             </p>
           </div>
         </div>
-        <p className="print-period">
-          Period: {period}<br />
-          Printed: {generatedDate}<br />
-          Entries: {closed.length} | Total: {toHours(totalSeconds)} hours | Amount: {formatMoney(totalCost, currency)}
-        </p>
+        <dl className="print-stats">
+          <div><dt>Period</dt><dd>{period}</dd></div>
+          <div><dt>Printed</dt><dd>{generatedDate}</dd></div>
+          <div><dt>Entries</dt><dd>{closed.length}</dd></div>
+          <div><dt>Hours</dt><dd>{toHours(totalSeconds)}</dd></div>
+          <div><dt>Amount</dt><dd>{formatMoney(totalCost, currency)}</dd></div>
+        </dl>
       </header>
 
       {/* Print-only summary table */}
@@ -299,7 +319,7 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, onDupl
               </tr>
               {/* Inside the table so it can never be pushed alone onto a fresh page. */}
               <tr className="print-footer-row">
-                <td colSpan={6}>CF Time Tracker - Timesheet printed on {generatedDate}</td>
+                <td colSpan={6}>CF-Time Tracker - Timesheet printed on {generatedDate}</td>
               </tr>
             </tbody>
           </table>
@@ -365,7 +385,7 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, onDupl
                         <Icon name="play" size={14} />
                       </button>
                     ) : null}
-                    {utcDate(e.start_time)}
+                    {formatDate(e.start_time, ledgerDateFormat)}
                   </td>
                   <td className="text-left">
                     {e.customer_id ? <Link className="link link-hover" to={`/clients/${e.customer_id}`}>{e.customer_name || "-"}</Link> : (e.customer_name || "-")}
@@ -384,7 +404,18 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, onDupl
                     {e.is_running ? "-" : formatMoney(e.cost, e.currency || currency)}
                   </td>
                   <td className="max-w-[20rem] truncate text-left">
-                    {e.description || ""}
+                    {onEdit ? (
+                      <button
+                        type="button"
+                        className="link link-hover max-w-full truncate text-left align-bottom"
+                        title="View or edit this entry"
+                        onClick={() => onEdit(e)}
+                      >
+                        {e.description || <span className="ink-muted">Add a note…</span>}
+                      </button>
+                    ) : (
+                      e.description || ""
+                    )}
                     <TagList value={e.tags} />
                   </td>
                   <td className="no-print text-right">

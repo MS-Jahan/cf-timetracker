@@ -1,31 +1,33 @@
 import { useEffect, useMemo, useState } from "react";
 import { currencySymbol } from "../lib/currencies.js";
-import { formatDateTimeLocal, formatDuration, formatMoney, parseDateTimeLocal } from "../lib/format.js";
+import { formatDuration, formatMoney } from "../lib/format.js";
+import { dateTimeHint, formatDateTimeInput, getDateFormat, parseDateTimeInput } from "../lib/dateFormat.js";
 
-function draftFrom(entry) {
+function draftFrom(entry, format) {
   return {
     customerId: entry.customer_id,
     projectId: entry.project_id,
     activityId: entry.activity_id,
     description: entry.description || "",
     tags: entry.tags || "",
-    startTime: formatDateTimeLocal(entry.start_time),
+    startTime: formatDateTimeInput(entry.start_time, format),
     // A running entry has no end yet; an empty field means "keep recording".
-    endTime: entry.is_running ? "" : formatDateTimeLocal(entry.end_time || entry.start_time + 3600000),
+    endTime: entry.is_running ? "" : formatDateTimeInput(entry.end_time || entry.start_time + 3600000, format),
     hourlyRate: String(entry.rate_applied ?? 0),
   };
 }
 
 export default function EntryEditor({ entry, customers, projects, activities, busy, onClose, onSave }) {
-  const [draft, setDraft] = useState(() => draftFrom(entry));
+  const format = getDateFormat("edit");
+  const [draft, setDraft] = useState(() => draftFrom(entry, format));
   const customerProjects = useMemo(
     () => projects.filter((project) => project.customer_id === draft.customerId),
     [projects, draft.customerId]
   );
 
   useEffect(() => {
-    setDraft(draftFrom(entry));
-  }, [entry]);
+    setDraft(draftFrom(entry, format));
+  }, [entry, format]);
 
   useEffect(() => {
     if (!customerProjects.some((project) => project.id === draft.projectId)) {
@@ -34,8 +36,8 @@ export default function EntryEditor({ entry, customers, projects, activities, bu
   }, [customerProjects, draft.projectId]);
 
   const running = Boolean(entry.is_running);
-  const startMs = parseDateTimeLocal(draft.startTime);
-  const endMs = parseDateTimeLocal(draft.endTime);
+  const startMs = parseDateTimeInput(draft.startTime, format);
+  const endMs = parseDateTimeInput(draft.endTime, format);
   const keepsRunning = running && draft.endTime === "";
   const previewSeconds = Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs
     ? Math.max(1, Math.round((endMs - startMs) / 1000))
@@ -117,20 +119,26 @@ export default function EntryEditor({ entry, customers, projects, activities, bu
 
           <label className="field-label">
             Started
-            <input className="input figure mt-1 w-full" type="datetime-local" value={draft.startTime}
+            <input className={`input figure mt-1 w-full ${draft.startTime && !Number.isFinite(startMs) ? "input-error" : ""}`} type="text"
+              inputMode="numeric" autoComplete="off" value={draft.startTime} placeholder={dateTimeHint(format)}
               onChange={(event) => set("startTime", event.target.value)} />
+            <span className="ink-muted mt-1 block text-xs font-normal normal-case">{dateTimeHint(format)} (24h)</span>
           </label>
 
           <label className="field-label">
             Ended
             <input
-              className="input figure mt-1 w-full"
-              type="datetime-local"
+              className={`input figure mt-1 w-full ${draft.endTime && !Number.isFinite(endMs) ? "input-error" : ""}`}
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
               value={draft.endTime}
-              placeholder={running ? "Still recording" : undefined}
+              placeholder={running ? "Still recording" : dateTimeHint(format)}
               onChange={(event) => set("endTime", event.target.value)}
             />
-            {running ? <span className="ink-muted mt-1 block text-xs font-normal normal-case">Leave empty to keep recording; fill in to stop the timer.</span> : null}
+            <span className="ink-muted mt-1 block text-xs font-normal normal-case">
+              {running ? `Leave empty to keep recording; fill in (${dateTimeHint(format)}) to stop the timer.` : `${dateTimeHint(format)} (24h)`}
+            </span>
           </label>
 
           <label className="field-label sm:col-span-2">
