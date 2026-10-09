@@ -31,6 +31,17 @@ export async function resolveRate(env, projectId, customerId, hourlyRate) {
   return cust?.hourly_rate ?? 0;
 }
 
+/** Billing currency recorded on an entry: project override, else the client's. */
+export async function resolveCurrency(env, projectId, customerId) {
+  const row = await env.DB.prepare(
+    "SELECT COALESCE(p.currency, c.currency) AS currency FROM customers c LEFT JOIN projects p ON p.id = ? WHERE c.id = ?"
+  ).bind(projectId, customerId).first();
+  return row?.currency || null;
+}
+
+// Reads below use COALESCE(te.currency, c.currency): rows from older seeds have a NULL
+// entry currency and fall back to the client's.
+
 /** Returns the list of FK names that don't exist. */
 export async function validateRefs(env, customerId, projectId, activityId) {
   const [cust, proj, act] = await Promise.all([
@@ -88,12 +99,13 @@ export async function startTimer(env, { customerId, projectId, activityId, descr
   const id = crypto.randomUUID();
   const startTime = Date.now();
   const rate = await resolveRate(env, projectId, customerId, hourlyRate);
+  const currency = await resolveCurrency(env, projectId, customerId);
 
   try {
     await env.DB.prepare(`
-      INSERT INTO time_entries (id, customer_id, project_id, activity_id, description, tags, start_time, rate_applied, is_running)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
-    `).bind(id, customerId, projectId, activityId, description || "", tags || "", startTime, rate).run();
+      INSERT INTO time_entries (id, customer_id, project_id, activity_id, description, tags, start_time, rate_applied, currency, is_running)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+    `).bind(id, customerId, projectId, activityId, description || "", tags || "", startTime, rate, currency).run();
   } catch (err) {
     // Lost the race: another request inserted a running row first.
     if (isUniqueViolation(err)) {
@@ -177,7 +189,7 @@ export async function querySummary(env, { fromMs, toMs, month } = {}) {
 
   const { results } = await env.DB.prepare(`
     SELECT c.name AS customer, p.name AS project,
-           MIN(c.currency) AS currency,
+           COALESCE(te.currency, c.currency) AS currency,
            SUM(te.duration_seconds) AS total_seconds,
            SUM(te.cost)             AS total_cost,
            COUNT(*)                 AS entry_count
@@ -185,7 +197,7 @@ export async function querySummary(env, { fromMs, toMs, month } = {}) {
     LEFT JOIN customers c ON te.customer_id = c.id
     LEFT JOIN projects  p ON te.project_id = p.id
     WHERE ${where}
-    GROUP BY te.customer_id, te.project_id
+    GROUP BY te.customer_id, te.project_id, COALESCE(te.currency, c.currency)
     ORDER BY total_seconds DESC
   `).bind(...bind).all();
 
@@ -250,31 +262,31 @@ export async function queryDashboard(env, { fromMs, toMs, month } = {}) {
       ORDER BY day ASC
     `).bind(...bind).all(),
     env.DB.prepare(`
-      SELECT c.id AS customer_id, c.name AS name, c.image_url, MIN(c.currency) AS currency, SUM(te.duration_seconds) AS total_seconds,
+      SELECT c.id AS customer_id, c.name AS name, c.image_url, COALESCE(te.currency, c.currency) AS currency, SUM(te.duration_seconds) AS total_seconds,
              SUM(te.cost) AS total_cost, COUNT(*) AS entry_count
       FROM time_entries te LEFT JOIN customers c ON te.customer_id = c.id
       WHERE ${where}
-      GROUP BY te.customer_id ORDER BY total_cost DESC
+      GROUP BY te.customer_id, COALESCE(te.currency, c.currency) ORDER BY total_cost DESC
     `).bind(...bind).all(),
     env.DB.prepare(`
-      SELECT p.id AS project_id, p.name AS name, p.image_url, c.name AS customer, MIN(c.currency) AS currency,
+      SELECT p.id AS project_id, p.name AS name, p.image_url, c.name AS customer, COALESCE(te.currency, c.currency) AS currency,
              SUM(te.duration_seconds) AS total_seconds,
              SUM(te.cost) AS total_cost, COUNT(*) AS entry_count
       FROM time_entries te
       LEFT JOIN projects p ON te.project_id = p.id
       LEFT JOIN customers c ON te.customer_id = c.id
       WHERE ${where}
-      GROUP BY te.project_id ORDER BY total_seconds DESC
+      GROUP BY te.project_id, COALESCE(te.currency, c.currency) ORDER BY total_seconds DESC
     `).bind(...bind).all(),
     env.DB.prepare(`
-      SELECT a.id AS activity_id, a.name AS name, a.emoji, a.image_url, MIN(c.currency) AS currency,
+      SELECT a.id AS activity_id, a.name AS name, a.emoji, a.image_url, COALESCE(te.currency, c.currency) AS currency,
              SUM(te.duration_seconds) AS total_seconds,
              SUM(te.cost) AS total_cost, COUNT(*) AS entry_count
       FROM time_entries te
       LEFT JOIN activities a ON te.activity_id = a.id
       LEFT JOIN customers c ON te.customer_id = c.id
       WHERE ${where}
-      GROUP BY te.activity_id ORDER BY total_seconds DESC
+      GROUP BY te.activity_id, COALESCE(te.currency, c.currency) ORDER BY total_seconds DESC
     `).bind(...bind).all(),
   ]);
 
@@ -583,7 +595,7 @@ export async function getClientDetail(env, id, { limit = 50, offset = 0 } = {}) 
   const [projects, entries, totals] = await Promise.all([
     env.DB.prepare("SELECT * FROM projects WHERE customer_id = ? ORDER BY name ASC").bind(id).all(),
     env.DB.prepare(`
-      SELECT te.*, c.name AS customer_name, p.name AS project_name, a.name AS activity_name
+      SELECT te.*, c.name AS customer_name, COALESCE(te.currency, c.currency) AS currency, p.name AS project_name, a.name AS activity_name
       FROM time_entries te
       LEFT JOIN customers c ON te.customer_id = c.id
       LEFT JOIN projects p ON te.project_id = p.id
@@ -648,7 +660,7 @@ export async function getProjectDetail(env, id, { limit = 50, offset = 0 } = {})
 
   const [entries, totals, byActivity, tasks] = await Promise.all([
     env.DB.prepare(`
-      SELECT te.*, c.name AS customer_name, c.currency AS currency, a.name AS activity_name
+      SELECT te.*, c.name AS customer_name, COALESCE(te.currency, c.currency) AS currency, a.name AS activity_name
       FROM time_entries te
       LEFT JOIN customers c ON te.customer_id = c.id
       LEFT JOIN activities a ON te.activity_id = a.id
@@ -664,14 +676,15 @@ export async function getProjectDetail(env, id, { limit = 50, offset = 0 } = {})
       WHERE te.project_id = ? AND te.is_running = 0
     `).bind(id).first(),
     env.DB.prepare(`
-      SELECT a.id AS activity_id, a.name AS name, a.emoji, a.image_url,
+      SELECT a.id AS activity_id, a.name AS name, a.emoji, a.image_url, COALESCE(te.currency, c.currency) AS currency,
              SUM(te.duration_seconds) AS total_seconds,
              SUM(te.cost) AS total_cost,
              COUNT(*) AS entry_count
       FROM time_entries te
       LEFT JOIN activities a ON a.id = te.activity_id
+      LEFT JOIN customers c ON c.id = te.customer_id
       WHERE te.project_id = ? AND te.is_running = 0
-      GROUP BY te.activity_id
+      GROUP BY te.activity_id, COALESCE(te.currency, c.currency)
       ORDER BY total_seconds DESC
     `).bind(id).all(),
     listProjectTasks(env, id),
@@ -706,7 +719,7 @@ export async function getActivityDetail(env, id, { limit = 50, offset = 0 } = {}
 
   const [entries, totals, byClient] = await Promise.all([
     env.DB.prepare(`
-      SELECT te.*, c.name AS customer_name, c.currency AS currency, p.name AS project_name
+      SELECT te.*, c.name AS customer_name, COALESCE(te.currency, c.currency) AS currency, p.name AS project_name
       FROM time_entries te
       LEFT JOIN customers c ON te.customer_id = c.id
       LEFT JOIN projects p ON te.project_id = p.id
@@ -722,14 +735,14 @@ export async function getActivityDetail(env, id, { limit = 50, offset = 0 } = {}
       WHERE te.activity_id = ? AND te.is_running = 0
     `).bind(id).first(),
     env.DB.prepare(`
-      SELECT c.id AS customer_id, c.name AS name, c.image_url, MIN(c.currency) AS currency,
+      SELECT c.id AS customer_id, c.name AS name, c.image_url, COALESCE(te.currency, c.currency) AS currency,
              SUM(te.duration_seconds) AS total_seconds,
              SUM(te.cost) AS total_cost,
              COUNT(*) AS entry_count
       FROM time_entries te
       LEFT JOIN customers c ON te.customer_id = c.id
       WHERE te.activity_id = ? AND te.is_running = 0
-      GROUP BY te.customer_id
+      GROUP BY te.customer_id, COALESCE(te.currency, c.currency)
       ORDER BY total_seconds DESC
     `).bind(id).all(),
   ]);
@@ -890,7 +903,7 @@ export async function listEntries(env, { fromMs, toMs, limit = 50, offset = 0 } 
 
   const [entries, count] = await Promise.all([
     env.DB.prepare(`
-      SELECT te.*, c.name AS customer_name, c.currency, p.name AS project_name, a.name AS activity_name
+      SELECT te.*, c.name AS customer_name, COALESCE(te.currency, c.currency) AS currency, p.name AS project_name, a.name AS activity_name
       FROM time_entries te
       LEFT JOIN customers c ON te.customer_id = c.id
       LEFT JOIN projects p ON te.project_id = p.id
@@ -1092,15 +1105,16 @@ export async function createTimeEntry(env, body = {}) {
 
   const durationSeconds = Math.max(1, Math.round((endTime - startTime) / 1000));
   const cost = (durationSeconds / 3600) * (applied || 0);
+  const currency = await resolveCurrency(env, projectId, customerId);
   const id = crypto.randomUUID();
   const description = String(body.description ?? "");
   const tags = String(body.tags ?? "");
 
   await env.DB.prepare(`
     INSERT INTO time_entries
-      (id, customer_id, project_id, activity_id, description, tags, start_time, end_time, duration_seconds, rate_applied, cost, is_running)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-  `).bind(id, customerId, projectId, activityId, description, tags, startTime, endTime, durationSeconds, applied, cost).run();
+      (id, customer_id, project_id, activity_id, description, tags, start_time, end_time, duration_seconds, rate_applied, cost, currency, is_running)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+  `).bind(id, customerId, projectId, activityId, description, tags, startTime, endTime, durationSeconds, applied, cost, currency).run();
 
   const entry = await env.DB.prepare("SELECT * FROM time_entries WHERE id = ?").bind(id).first();
   return { status: "ok", entry };
@@ -1150,6 +1164,12 @@ export async function updateTimeEntry(env, id, patch = {}) {
     return { status: "invalid", error: "projectId does not belong to customerId" };
   }
 
+  // Currency is frozen at record time; only a client/project move re-resolves it.
+  const moved = customerId !== current.customer_id || projectId !== current.project_id;
+  const currency = moved || !current.currency
+    ? await resolveCurrency(env, projectId, customerId)
+    : current.currency;
+
   const rate = patch.hourlyRate === undefined ? Number(current.rate_applied || 0) : asRate(patch.hourlyRate);
   const rateError = badRate(rate);
   if (rateError) return { status: "invalid", error: `hourlyRate ${rateError}` };
@@ -1174,10 +1194,10 @@ export async function updateTimeEntry(env, id, patch = {}) {
       const { meta } = await env.DB.prepare(`
         UPDATE time_entries
         SET customer_id = ?, project_id = ?, activity_id = ?, description = ?, tags = ?,
-            start_time = ?, end_time = ?, duration_seconds = ?, rate_applied = ?, cost = ?, is_running = 0
+            start_time = ?, end_time = ?, duration_seconds = ?, rate_applied = ?, cost = ?, currency = ?, is_running = 0
         WHERE id = ? AND is_running = 1
       `)
-        .bind(customerId, projectId, activityId, description, tags, startTime, endTime, durationSeconds, rate, cost, id)
+        .bind(customerId, projectId, activityId, description, tags, startTime, endTime, durationSeconds, rate, cost, currency, id)
         .run();
       if (!meta?.changes) {
         return { status: "conflict", error: "The timer was already stopped; reload and try again" };
@@ -1186,10 +1206,10 @@ export async function updateTimeEntry(env, id, patch = {}) {
       const { meta } = await env.DB.prepare(`
         UPDATE time_entries
         SET customer_id = ?, project_id = ?, activity_id = ?, description = ?, tags = ?,
-            start_time = ?, rate_applied = ?
+            start_time = ?, rate_applied = ?, currency = ?
         WHERE id = ? AND is_running = 1
       `)
-        .bind(customerId, projectId, activityId, description, tags, startTime, rate, id)
+        .bind(customerId, projectId, activityId, description, tags, startTime, rate, currency, id)
         .run();
       if (!meta?.changes) {
         return { status: "conflict", error: "The timer was already stopped; reload and try again" };
@@ -1213,10 +1233,10 @@ export async function updateTimeEntry(env, id, patch = {}) {
   await env.DB.prepare(`
     UPDATE time_entries
     SET customer_id = ?, project_id = ?, activity_id = ?, description = ?, tags = ?,
-        start_time = ?, end_time = ?, duration_seconds = ?, rate_applied = ?, cost = ?
+        start_time = ?, end_time = ?, duration_seconds = ?, rate_applied = ?, cost = ?, currency = ?
     WHERE id = ? AND is_running = 0
   `)
-    .bind(customerId, projectId, activityId, description, tags, startTime, endTime, durationSeconds, rate, cost, id)
+    .bind(customerId, projectId, activityId, description, tags, startTime, endTime, durationSeconds, rate, cost, currency, id)
     .run();
 
   return {
@@ -1311,6 +1331,7 @@ export async function importCsvBatch(env, payload = {}) {
 
   // Existing-entry dedupe keys: (project, activity, start).
   const existing = new Set();
+  const currencyCache = new Map();
   if (!dryRun) {
     const { results } = await env.DB.prepare("SELECT project_id, activity_id, start_time FROM time_entries").all();
     for (const row of results) existing.add(`${row.project_id}|${row.activity_id}|${row.start_time}`);
@@ -1347,13 +1368,15 @@ export async function importCsvBatch(env, payload = {}) {
 
     const durationSeconds = Math.max(1, Math.round((endTime - startTime) / 1000));
     const cost = (durationSeconds / 3600) * (rate || 0);
+    const currencyKey = `${customerIdValue}|${projectIdValue}`;
+    if (!currencyCache.has(currencyKey)) currencyCache.set(currencyKey, await resolveCurrency(env, projectIdValue, customerIdValue));
     inserts.push(
       env.DB.prepare(
-        "INSERT INTO time_entries (id, customer_id, project_id, activity_id, description, tags, start_time, end_time, duration_seconds, rate_applied, cost, is_running) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)"
+        "INSERT INTO time_entries (id, customer_id, project_id, activity_id, description, tags, start_time, end_time, duration_seconds, rate_applied, cost, currency, is_running) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)"
       ).bind(
         crypto.randomUUID(), customerIdValue, projectIdValue, activityIdValue,
         String(row.description ?? ""), String(row.tags ?? ""),
-        startTime, endTime, durationSeconds, rate, cost
+        startTime, endTime, durationSeconds, rate, cost, currencyCache.get(currencyKey)
       )
     );
   }

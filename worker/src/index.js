@@ -108,7 +108,7 @@ export default {
         const [activeTimer, recentEntries, customers, projects, activities, projectTasks, archivedCustomers, archivedProjects, archivedActivities] = await Promise.all([
           getActiveTimer(env),
           env.DB.prepare(`
-            SELECT te.*, c.name AS customer_name, c.currency, p.name AS project_name, a.name AS activity_name
+            SELECT te.*, c.name AS customer_name, COALESCE(te.currency, c.currency) AS currency, p.name AS project_name, a.name AS activity_name
             FROM time_entries te
             LEFT JOIN customers c ON te.customer_id = c.id
             LEFT JOIN projects p ON te.project_id = p.id

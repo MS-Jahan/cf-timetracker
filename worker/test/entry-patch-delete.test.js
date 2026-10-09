@@ -57,6 +57,7 @@ function stubDb({ current, after } = {}) {
           }
           if (/SELECT is_running FROM time_entries/.test(sql)) return current;
           if (/^SELECT 1 FROM/.test(sql.trim())) return { 1: 1 };
+          if (/AS currency FROM customers c LEFT JOIN projects p/.test(sql)) return { currency: "EUR" };
           if (/SELECT customer_id FROM projects/.test(sql)) return { customer_id: CUSTOMER_ID };
           if (/COUNT\(\*\) AS total FROM project_tasks/.test(sql)) return { total: 0 };
           return null;
@@ -188,5 +189,23 @@ describe("deleteTimeEntry", () => {
     const result = await deleteTimeEntry(env, ENTRY_ID);
 
     assert.equal(result.status, "not_found");
+  });
+});
+
+describe("entry currency on edit", () => {
+  const frozen = { current: closedRow({ currency: "BDT" }) };
+
+  it("keeps the recorded currency when only the note or rate changes", async () => {
+    const env = stubDb(frozen);
+    const result = await updateTimeEntry(env, ENTRY_ID, { description: "renamed", hourlyRate: 120 });
+    assert.equal(result.status, "ok");
+    assert.equal(env.DB.updates[0].args[10], "BDT", "history must not be relabelled by an edit");
+  });
+
+  it("re-resolves the currency when the entry moves to another project", async () => {
+    const env = stubDb(frozen);
+    const result = await updateTimeEntry(env, ENTRY_ID, { projectId: "p0000000-0000-4000-8000-000000000002" });
+    assert.equal(result.status, "ok");
+    assert.equal(env.DB.updates[0].args[10], "EUR");
   });
 });

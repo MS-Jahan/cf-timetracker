@@ -14,7 +14,7 @@ function buildSummary(entries) {
   const closed = entries.filter((e) => !e.is_running);
   const map = new Map();
   for (const e of closed) {
-    const key = `${e.customer_id || "?"}|${e.project_id || "?"}`;
+    const key = `${e.customer_id || "?"}|${e.project_id || "?"}|${e.currency || "?"}`;
     if (!map.has(key)) {
       map.set(key, {
         client: e.customer_name || "-",
@@ -49,6 +49,20 @@ function currencyFor(entries) {
 
 // Final entries kept on the same printed page as the total + footer.
 const KEEP_TAIL = 2;
+
+/** Per-currency totals, biggest first: [{ currency, seconds, count, cost }]. */
+function totalsByCurrency(entries, fallback) {
+  const map = new Map();
+  for (const e of entries) {
+    const currency = e.currency || fallback;
+    if (!map.has(currency)) map.set(currency, { currency, seconds: 0, count: 0, cost: 0 });
+    const t = map.get(currency);
+    t.seconds += e.duration_seconds || 0;
+    t.count += 1;
+    t.cost += Number(e.cost || 0);
+  }
+  return [...map.values()].sort((a, b) => b.cost - a.cost);
+}
 
 function TagList({ value }) {
   const tags = String(value || "")
@@ -172,6 +186,8 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, onDupl
   const currency = currencyFor(closed);
   const mixedCurrencies = new Set(closed.map((e) => e.currency || "?")).size > 1;
   const summary = buildSummary(entries);
+  const currencyTotals = totalsByCurrency(closed, currency);
+  const amountText = currencyTotals.length ? currencyTotals.map((t) => formatMoney(t.cost, t.currency)).join(" + ") : formatMoney(0, currency);
 
   // Explicit month filter -> "October 2026"; otherwise the entries' span: a whole
   // month by name, anything else as a compact range (see docs/2026-10-09-print-period-label.md).
@@ -255,7 +271,7 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, onDupl
           <div><dt>Printed</dt><dd>{generatedDate}</dd></div>
           <div><dt>Entries</dt><dd>{closed.length}</dd></div>
           <div><dt>Hours</dt><dd>{toHours(totalSeconds)}</dd></div>
-          <div><dt>Amount</dt><dd>{formatMoney(totalCost, currency)}</dd></div>
+          <div><dt>Amount</dt><dd>{amountText}</dd></div>
         </dl>
       </header>
 
@@ -285,12 +301,14 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, onDupl
               ))}
             </tbody>
             <tfoot>
-              <tr>
-                <td colSpan={2}>Total</td>
-                <td className="text-right" style={{ fontFamily: "monospace" }}>{toHours(totalSeconds)}</td>
-                <td className="text-right" style={{ fontFamily: "monospace" }}>{closed.length}</td>
-                <td className="text-right" style={{ fontFamily: "monospace" }}>{formatMoney(totalCost, currency)}</td>
-              </tr>
+              {currencyTotals.map((t) => (
+                <tr key={t.currency}>
+                  <td colSpan={2}>{currencyTotals.length > 1 ? `Total (${t.currency})` : "Total"}</td>
+                  <td className="text-right" style={{ fontFamily: "monospace" }}>{toHours(t.seconds)}</td>
+                  <td className="text-right" style={{ fontFamily: "monospace" }}>{t.count}</td>
+                  <td className="text-right" style={{ fontFamily: "monospace" }}>{formatMoney(t.cost, t.currency)}</td>
+                </tr>
+              ))}
             </tfoot>
           </table>
         </div>
@@ -355,11 +373,13 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, onDupl
             </tbody>
             <tbody className="print-tail">
               {closed.slice(-KEEP_TAIL).map(detailRow)}
-              <tr className="print-total-row">
-                <td colSpan={4}>Total</td>
-                <td className="text-right col-nowrap">{formatDuration(totalSeconds)}</td>
-                <td className="text-right">{formatMoney(totalCost, currency)}</td>
-              </tr>
+              {currencyTotals.map((t) => (
+                <tr key={t.currency} className="print-total-row">
+                  <td colSpan={4}>{currencyTotals.length > 1 ? `Total (${t.currency})` : "Total"}</td>
+                  <td className="text-right col-nowrap">{formatDuration(t.seconds)}</td>
+                  <td className="text-right">{formatMoney(t.cost, t.currency)}</td>
+                </tr>
+              ))}
               {/* Inside the table so it can never be pushed alone onto a fresh page. */}
               <tr className="print-footer-row">
                 <td colSpan={6}>cf-timetracker v{__APP_VERSION__} - Timesheet printed on {generatedDate}</td>
@@ -479,12 +499,12 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, onDupl
             <tr className="rule-double whitespace-nowrap">
               <td colSpan={4} className="ink-muted text-left">
                 {closed.length} closed {closed.length === 1 ? "entry" : "entries"}
-                {mixedCurrencies ? <span className="no-print"> · total in {currency}</span> : null}
+                {mixedCurrencies ? <span className="no-print"> · amount shown per currency</span> : null}
               </td>
               <td className="figure text-right font-semibold">{formatDuration(totalSeconds)}</td>
               <td className="hidden lg:table-cell" />
               <td className="figure text-accent text-right text-base font-semibold">
-                {formatMoney(totalCost, currency)}
+                {amountText}
               </td>
               <td />
               <td className="no-print" />

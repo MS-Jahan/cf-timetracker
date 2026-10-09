@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS time_entries (
     duration_seconds INTEGER DEFAULT 0,
     rate_applied REAL DEFAULT 0.0,
     cost REAL DEFAULT 0.0,
+    currency TEXT, -- billing currency frozen at record time (NULL falls back to the client's)
     is_running INTEGER DEFAULT 0 CHECK(is_running IN (0, 1)),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (customer_id) REFERENCES customers(id),

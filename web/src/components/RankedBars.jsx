@@ -20,7 +20,7 @@ export default function RankedBars({ rows, valueKey, money = false, linkRows = n
           </span>
         );
         return (
-          <div key={`${row.name}-${row.customer || ""}`}>
+          <div key={`${row.name}-${row.customer || ""}-${row.currency || ""}`}>
             <div className="flex items-center justify-between gap-4 text-sm">
               <span className="flex min-w-0 items-center gap-2">
                 <IdentityMark name={row.name} imageUrl={row.image_url} emoji={row.emoji} />

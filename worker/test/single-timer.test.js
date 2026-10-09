@@ -41,6 +41,7 @@ function stubDb({ active = null, insertError = null, stopChanges = 1, row = {} }
           if (/FROM time_entries WHERE is_running = 1/.test(sql)) return active;
           if (/^SELECT 1 FROM/.test(sql.trim())) return { 1: 1 };
           if (/SELECT rate FROM projects/.test(sql)) return { rate: 130 };
+          if (/AS currency FROM customers c LEFT JOIN projects p/.test(sql)) return { currency: "BDT" };
           if (/SELECT hourly_rate FROM customers/.test(sql)) return { hourly_rate: 120 };
           if (/SELECT \* FROM time_entries WHERE id = \?/.test(sql)) {
             return { id: this.args[0], is_running: 1, ...row };
@@ -73,8 +74,9 @@ describe("startTimer", () => {
     assert.equal(result.timer.is_running, 1);
     const [insert] = env.DB.insertCalls();
     assert.ok(insert, "expected an INSERT");
-    assert.match(insert.sql, /VALUES \(\?, \?, \?, \?, \?, \?, \?, \?, 1\)/);
+    assert.match(insert.sql, /VALUES \(\?, \?, \?, \?, \?, \?, \?, \?, \?, 1\)/);
     assert.equal(insert.args[7], 130, "rate should come from the project");
+    assert.equal(insert.args[8], "BDT", "currency is frozen on the entry when it starts");
   });
 
   it("refuses to start when a timer is already running (fast path)", async () => {

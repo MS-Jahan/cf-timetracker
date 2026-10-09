@@ -8,9 +8,10 @@ function runsOf(entries) {
   const runs = [];
   for (const e of entries) {
     const rate = cents(e.rate_applied);
+    const currency = e.currency || "USD";
     const last = runs[runs.length - 1];
-    if (last && last.rate === rate) last.to = e.start_time;
-    else runs.push({ rate, from: e.start_time, to: e.start_time });
+    if (last && last.rate === rate && last.currency === currency) last.to = e.start_time;
+    else runs.push({ rate, currency, from: e.start_time, to: e.start_time });
   }
   return runs;
 }
@@ -26,7 +27,7 @@ export function buildRateRows(entries) {
   const clients = new Map();
   for (const e of closed) {
     const key = e.customer_id || e.customer_name || "?";
-    if (!clients.has(key)) clients.set(key, { name: e.customer_name || "-", currency: e.currency || "USD", entries: [] });
+    if (!clients.has(key)) clients.set(key, { name: e.customer_name || "-", entries: [] });
     clients.get(key).entries.push(e);
   }
 
@@ -49,7 +50,7 @@ export function buildRateRows(entries) {
   }
 
   const rows = groups.flatMap((g) =>
-    g.runs.map((r) => ({ client: g.client.name, project: g.project, currency: g.client.currency, rate: r.rate / 100, from: r.from, to: r.to }))
+    g.runs.map((r) => ({ client: g.client.name, project: g.project, currency: r.currency, rate: r.rate / 100, from: r.from, to: r.to }))
   );
   return {
     rows,

@@ -275,6 +275,12 @@
     border-bottom: none;
   }
 
+  /* Several currencies: extra total rows get a hairline instead of a second heavy rule. */
+  .print-summary tfoot tr + tr td,
+  table.print-details-table tr.print-total-row + tr.print-total-row td {
+    border-top: 1px solid #999;
+  }
+
   .print-sub {
     color: #555;
     font-size: 8pt;
