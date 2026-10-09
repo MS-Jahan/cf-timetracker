@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS project_tasks (
 CREATE INDEX IF NOT EXISTS idx_entries_customer ON time_entries(customer_id);
 CREATE INDEX IF NOT EXISTS idx_entries_project ON time_entries(project_id);
 CREATE INDEX IF NOT EXISTS idx_entries_start ON time_entries(start_time);
+CREATE INDEX IF NOT EXISTS idx_entries_activity ON time_entries(activity_id);
 CREATE INDEX IF NOT EXISTS idx_entries_running ON time_entries(is_running);
 CREATE INDEX IF NOT EXISTS idx_project_tasks_project ON project_tasks(project_id);
 

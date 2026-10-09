@@ -163,7 +163,27 @@ describe("listEntries", () => {
     assert.equal(result.paging.limit, 200, "limit must be capped at 200");
     assert.equal(result.entries.length, 2);
     assert.equal(result.paging.total, 9);
-    const [count] = env.DB.state.links;
-    void count;
+    assert.equal(result.paging.has_more, false);
+  });
+
+  it("only counts the table on the first page and detects a next page", async () => {
+    const countCalls = [];
+    const rows = Array.from({ length: 4 }, (_, i) => ({ id: `e${i}` }));
+    const db = stubDb({ entryRows: rows, total: 4 });
+    const original = db.prepare.bind(db);
+    db.prepare = (sql) => {
+      if (/COUNT\(\*\) AS total FROM time_entries/.test(sql)) countCalls.push(sql);
+      return original(sql);
+    };
+
+    const later = await listEntries({ DB: db }, { limit: 3, offset: 3 });
+    assert.equal(countCalls.length, 0, "no COUNT(*) after the first page");
+    assert.equal(later.paging.total, null);
+    assert.equal(later.paging.has_more, true, "limit+1 rows means another page exists");
+    assert.equal(later.entries.length, 3, "the probe row is not returned");
+
+    const first = await listEntries({ DB: db }, { limit: 3, offset: 0 });
+    assert.equal(countCalls.length, 1);
+    assert.equal(first.paging.total, 4);
   });
 });

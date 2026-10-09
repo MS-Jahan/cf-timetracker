@@ -24,6 +24,7 @@
 | Monthly breakdown strip on detail pages | `2026-09-20-detail-pages.md` §6 | one more aggregate per entity endpoint |
 | Query-param deep links (`/timesheet?client=`) | same doc | router already parses paths only |
 | Verify `Cf-Access-Jwt-Assertion` in the Worker | deploy runbook §5 | Access already gates the route; JWT check is defense-in-depth |
+| Read scaling + multi-device freshness (data_rev, period-scoped ledger, keyset paging, ETag/cache) | D1 metrics 2026-10-09: full-history refetch per action | phased plan in `2026-10-09-read-scaling-plan.md` |
 
 ## Open production items (need the account owner, not code)
 

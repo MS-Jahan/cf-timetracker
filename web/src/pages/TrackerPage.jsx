@@ -46,7 +46,10 @@ export default function TrackerPage({ tracker }) {
       setHistoryError("");
     }).catch((err) => setHistoryError(err.message));
   }, []);
-  useEffect(() => { reloadHistory(); }, [reloadHistory, tracker.entries]);
+  // Reload the full history only when the server data revision moves (this page's own
+  // changes and other devices' both bump it). Older backends without a revision fall
+  // back to the previous "any bootstrap change" behaviour.
+  useEffect(() => { reloadHistory(); }, [reloadHistory, tracker.dataRev ?? tracker.entries]);
 
   const selectPeriod = (value) => {
     setPeriod(value);

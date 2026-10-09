@@ -32,6 +32,9 @@ async function request(path, options = {}) {
 
 export const getBootstrap = () => request("/api/bootstrap");
 
+/** One-row change check: compare with `dataRev` from bootstrap to see if another device wrote. */
+export const getRev = () => request("/api/rev");
+
 /** Client detail: profile, projects, paginated time history, and totals. */
 export const getClient = (id, { limit = 50, offset = 0 } = {}) =>
   request(`/api/clients/${encodeURIComponent(id)}?limit=${limit}&offset=${offset}`);

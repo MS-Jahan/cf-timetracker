@@ -6,7 +6,7 @@
 // Every tool is request/response, so SSE adds machinery with no capability gain. Revisit
 // only if a client demands `text/event-stream` or long-lived sessions.
 
-import { getActiveTimer, monthRange, isValidMonth, querySummary, startTimer, stopTimer } from "./core.js";
+import { bumpDataRev, getActiveTimer, monthRange, isValidMonth, querySummary, startTimer, stopTimer } from "./core.js";
 
 export const PROTOCOL_VERSION = "2025-06-18";
 
@@ -86,7 +86,10 @@ async function callTool(env, name, args = {}) {
     }
     case "start_timer": {
       const res = await startTimer(env, args);
-      if (res.status === "ok") return { success: true, timer: res.timer };
+      if (res.status === "ok") {
+        await bumpDataRev(env);
+        return { success: true, timer: res.timer };
+      }
       // JSON-RPC has no HTTP status to carry, so the conflict travels as `code`
       // ("timer_running") inside an isError tool result - MCP's transport-neutral
       // equivalent of the REST 409.
@@ -94,7 +97,10 @@ async function callTool(env, name, args = {}) {
     }
     case "stop_timer": {
       const res = await stopTimer(env);
-      if (res.status === "ok") return { success: true, timer: res.timer };
+      if (res.status === "ok") {
+        await bumpDataRev(env);
+        return { success: true, timer: res.timer };
+      }
       return { error: res.error, ...(res.code ? { code: res.code } : {}), _isError: true };
     }
     case "query_summary": {

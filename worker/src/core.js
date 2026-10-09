@@ -22,6 +22,30 @@ function isUniqueViolation(err) {
   return /UNIQUE constraint failed|SQLITE_CONSTRAINT/i.test(String(err?.message || ""));
 }
 
+/**
+ * Data revision: one counter in `settings`, bumped by every successful mutation
+ * (see index.js / mcp.js). Clients compare it to know whether another device changed
+ * anything. Works without a pre-seeded row; failures never break the write itself.
+ */
+export async function getDataRev(env) {
+  try {
+    const row = await env.DB.prepare("SELECT value FROM settings WHERE key = 'data_rev'").first();
+    return Number(row?.value || 0);
+  } catch {
+    return 0;
+  }
+}
+
+export async function bumpDataRev(env) {
+  try {
+    await env.DB.prepare(
+      "INSERT INTO settings (key, value) VALUES ('data_rev', '1') ON CONFLICT(key) DO UPDATE SET value = CAST(value AS INTEGER) + 1"
+    ).run();
+  } catch {
+    // Best effort: a missing settings table must not fail the user's change.
+  }
+}
+
 /** Rate fallback: explicit hourlyRate ?? project.rate ?? customer.hourly_rate ?? 0 */
 export async function resolveRate(env, projectId, customerId, hourlyRate) {
   if (hourlyRate !== undefined && hourlyRate !== null && hourlyRate !== "") return Number(hourlyRate);
@@ -901,6 +925,8 @@ export async function listEntries(env, { fromMs, toMs, limit = 50, offset = 0 } 
   }
   const where = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
 
+  // Fetch one extra row to learn whether another page exists, and count the table
+  // only for the first page: re-counting on every page re-reads the whole range.
   const [entries, count] = await Promise.all([
     env.DB.prepare(`
       SELECT te.*, c.name AS customer_name, COALESCE(te.currency, c.currency) AS currency, p.name AS project_name, a.name AS activity_name
@@ -911,14 +937,21 @@ export async function listEntries(env, { fromMs, toMs, limit = 50, offset = 0 } 
       ${where}
       ORDER BY te.start_time DESC, te.id DESC
       LIMIT ? OFFSET ?
-    `).bind(...bind, maxLimit, safeOffset).all(),
-    env.DB.prepare(`SELECT COUNT(*) AS total FROM time_entries te ${where}`).bind(...bind).first(),
+    `).bind(...bind, maxLimit + 1, safeOffset).all(),
+    safeOffset === 0
+      ? env.DB.prepare(`SELECT COUNT(*) AS total FROM time_entries te ${where}`).bind(...bind).first()
+      : Promise.resolve(null),
   ]);
+
+  const rows = entries.results || [];
+  const hasMore = rows.length > maxLimit;
+  const page = hasMore ? rows.slice(0, maxLimit) : rows;
 
   return {
     status: "ok",
-    entries: entries.results || [],
-    paging: { limit: maxLimit, offset: safeOffset, returned: (entries.results || []).length, total: count?.total || 0 },
+    entries: page,
+    // `total` is only computed for the first page (null afterwards); `has_more` is always set.
+    paging: { limit: maxLimit, offset: safeOffset, returned: page.length, has_more: hasMore, total: safeOffset === 0 ? count?.total || 0 : null },
   };
 }
 

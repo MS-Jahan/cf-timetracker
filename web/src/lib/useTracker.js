@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { getBootstrap } from "./api.js";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { getBootstrap, getRev } from "./api.js";
 
 /**
  * Bootstrap data + a uniform action wrapper. Each page mounts its own instance,
@@ -29,6 +29,34 @@ export function useTracker() {
 
   useEffect(() => {
     load();
+  }, [load]);
+
+  // Another device may have changed data while this tab was in the background: on
+  // return, compare the server's data revision (1 row read) and reload only if it moved.
+  const revRef = useRef(null);
+  useEffect(() => {
+    revRef.current = data?.dataRev ?? null;
+  }, [data]);
+  useEffect(() => {
+    let checking = false;
+    const check = async () => {
+      if (document.visibilityState !== "visible" || checking || revRef.current === null) return;
+      checking = true;
+      try {
+        const { rev } = await getRev();
+        if (rev !== revRef.current) await load();
+      } catch {
+        // Offline or transient: keep showing the data we have.
+      } finally {
+        checking = false;
+      }
+    };
+    document.addEventListener("visibilitychange", check);
+    window.addEventListener("focus", check);
+    return () => {
+      document.removeEventListener("visibilitychange", check);
+      window.removeEventListener("focus", check);
+    };
   }, [load]);
 
   /**
@@ -82,5 +110,6 @@ export function useTracker() {
     archivedProjects: data?.archivedProjects || [],
     archivedActivities: data?.archivedActivities || [],
     activeTimer: data?.activeTimer || null,
+    dataRev: data?.dataRev ?? null,
   };
 }

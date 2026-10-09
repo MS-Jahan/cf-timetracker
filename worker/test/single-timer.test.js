@@ -8,7 +8,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { ERROR_CODES, startTimer, stopTimer } from "../src/core.js";
+import { ERROR_CODES, startTimer, stopTimer, bumpDataRev, getDataRev } from "../src/core.js";
 
 const UNIQUE_ERROR = new Error(
   "D1_ERROR: UNIQUE constraint failed: time_entries.is_running: SQLITE_CONSTRAINT"
@@ -142,5 +142,31 @@ describe("stopTimer", () => {
 
     assert.equal(result.status, "not_found", "second stop must not claim success");
     assert.equal(result.code, ERROR_CODES.NO_ACTIVE_TIMER);
+  });
+});
+
+describe("data revision", () => {
+  it("bumps with an upsert (no pre-seeded settings row needed) and reads 0 when missing", async () => {
+    const calls = [];
+    const env = {
+      DB: {
+        prepare(sql) {
+          return {
+            bind() { return this; },
+            async run() { calls.push(sql); return { success: true }; },
+            async first() { return null; },
+          };
+        },
+      },
+    };
+    await bumpDataRev(env);
+    assert.match(calls[0], /INSERT INTO settings .* ON CONFLICT\(key\) DO UPDATE SET value = CAST\(value AS INTEGER\) \+ 1/);
+    assert.equal(await getDataRev(env), 0);
+  });
+
+  it("never throws when the settings table is missing", async () => {
+    const env = { DB: { prepare() { throw new Error("no such table: settings"); } } };
+    await bumpDataRev(env);
+    assert.equal(await getDataRev(env), 0);
   });
 });
