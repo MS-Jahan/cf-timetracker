@@ -3,6 +3,9 @@
 All notable changes. Newest first. Rules: `docs/2026-10-09-versioning.md` (SemVer, pre-1.0: `feat` = minor, `fix` = patch; docs/chore/ci do not bump).
 Versions 0.1.0 to 0.15.x were assigned retroactively from commit history on 2026-10-09.
 
+## 0.16.1 - 2026-10-09
+- fix: client detail page crashed (`setLoading is not defined`); removed leftover duplicate fetch effect
+
 ## 0.16.0 - 2026-10-09
 - feat: versioning: SemVer rules, CHANGELOG, version shown on printed reports
 

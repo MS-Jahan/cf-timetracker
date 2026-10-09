@@ -61,26 +61,6 @@ export default function ClientDetailPage() {
     };
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError("");
-    getClient(id, { limit: PAGE, offset }).then((payload) => {
-      if (!cancelled) {
-        setData(payload);
-        setLoading(false);
-      }
-    }).catch((err) => {
-      if (!cancelled) {
-        setError(err.message);
-        setLoading(false);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [id, offset]);
-
   if (error) {
     return (
       <section className="py-16">
