@@ -237,6 +237,7 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, onDupl
             <h1>
               <span className="print-brand-cf">cf</span>
               <span className="print-brand-rest">-timetracker</span>
+              <small className="print-version">v{__APP_VERSION__}</small>
             </h1>
             <p className="print-meta">
               Billable hours report{mixedCurrencies ? " (mixed currencies)" : ""}
@@ -325,7 +326,7 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, onDupl
               </tr>
               {/* Inside the table so it can never be pushed alone onto a fresh page. */}
               <tr className="print-footer-row">
-                <td colSpan={6}>cf-timetracker - Timesheet printed on {generatedDate}</td>
+                <td colSpan={6}>cf-timetracker v{__APP_VERSION__} - Timesheet printed on {generatedDate}</td>
               </tr>
             </tbody>
           </table>

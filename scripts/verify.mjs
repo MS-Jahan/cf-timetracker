@@ -3,6 +3,7 @@
  * Project verification gate.
  *
  * Runs:
+ *   0. version consistency (package.json vs CHANGELOG.md)
  *   1. worker unit tests
  *   2. web production build
  *   3. concurrent single-active-timer behavior check
@@ -113,6 +114,9 @@ async function stopWorker() {
 }
 
 async function main() {
+  log("version consistency");
+  await commandFor("node", ["scripts/check-version.mjs"], root);
+
   log("worker unit tests");
   await commandFor("npm", ["test"], workerDir);
 

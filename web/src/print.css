@@ -144,6 +144,15 @@
     color: #08203e !important;
   }
 
+  /* Small release tag after the brand name (version from root package.json). */
+  .print-version {
+    margin-left: 2mm;
+    font-size: 8pt;
+    font-weight: 400;
+    color: #666;
+    vertical-align: baseline;
+  }
+
   /* Key figures as labelled blocks instead of a pipe-separated line. */
   .print-stats {
     display: flex;

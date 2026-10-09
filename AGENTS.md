@@ -6,6 +6,7 @@ This file guides coding agents working in this repo. Follow it unless the user o
 
 Kimai-style time tracker: **Cloudflare Pages (Vite + React + Tailwind)** → **Cloudflare Worker (REST + MCP JSON-RPC)** → **Cloudflare D1 (SQLite)** → optional **Google Sheets sync via Apps Script webhook**. Protected by **Cloudflare Zero Trust Access**.
 
+**Versioning (read first, update after every change):** `docs/2026-10-09-versioning.md` — SemVer from root `package.json`, history in `CHANGELOG.md`.
 Foundational spec: `docs/2026-09-19-initial-prompt-system-architecture.md`
 Delivery plan: `docs/2026-09-19-phased-plan.md`
 Checkable work items: `docs/2026-09-19-task-list.md`
@@ -16,7 +17,8 @@ Design deliberation: `docs/2026-09-19-brainstorm-notes.md`
 ```
 /
 ├── AGENTS.md
-├── package.json                 # root `npm run verify` verification gate
+├── CHANGELOG.md                 # version history, newest first (see docs/2026-10-09-versioning.md)
+├── package.json                 # root `npm run verify` verification gate + product `version` (single source of truth)
 ├── .github/workflows/verify.yml # CI invocation of the verification gate
 ├── docs/                        # Dated docs only: YYYY-MM-DD-<topic>.md
 ├── db/
@@ -56,7 +58,7 @@ Do not introduce top-level folders outside this layout without updating this fil
 - Runtime: Cloudflare Workers + D1 (SQLite at edge). Frontend: Vite + React + Tailwind + daisyUI, deployed on Pages. Native client: one Flutter project under `apps/timetracker/`, shared across Windows/Linux/Android and compatible with macOS/iOS runners.
 - Toolchain: `wrangler`, `npm`. D1 init: `wrangler d1 execute <DB_NAME> --file=./db/schema.sql`.
 - Local dev: `wrangler dev` (worker), `npm run dev` (web), `cd apps/timetracker && flutter run -d <target> --dart-define=API_BASE_URL=<worker-url>` (native). Verify worker with `curl` against `/api/bootstrap`; verify D1 with `wrangler d1 execute <DB> --command="SELECT 1"`.
-- Verification gate: `npm run verify` (worker unit tests, web production build, and a managed local concurrency check). It starts/stops its own temporary Wrangler server; use `VERIFY_API_BASE=http://127.0.0.1:8787 npm run verify` to target an existing server. Details: `docs/2026-09-19-verification-gate.md`.
+- Verification gate: `npm run verify` (version check, worker unit tests, web production build, and a managed local concurrency check). It starts/stops its own temporary Wrangler server; use `VERIFY_API_BASE=http://127.0.0.1:8787 npm run verify` to target an existing server. Details: `docs/2026-09-19-verification-gate.md`.
 - Tests: `cd worker && npm test` (Node's built-in runner, no framework). The lower-level concurrency check is `node scripts/check-single-timer.mjs [apiBase] [attempts]` and requires a running, seeded API.
 - No committed secrets. GAS webhook URL, Access team config, and D1 IDs go through env / `wrangler secret` / local `.dev.vars` (gitignored).
 
@@ -108,6 +110,7 @@ Do not introduce top-level folders outside this layout without updating this fil
 
 ## Definition of done (per task)
 
+0. **Version:** apply the bump rules in `docs/2026-10-09-versioning.md` (feat = minor, fix = patch, docs/chore/ci = none): edit root `package.json` `version` and add a `CHANGELOG.md` entry in the same commit. `npm run verify` fails if they disagree.
 1. Code + migration (if schema) + seed/update where relevant.
 2. `curl`/smoke test recorded in the PR/task note (bootstrap, start→stop cycle, sync dry-run).
 3. No `*` CORS in prod path, no secrets committed, Zero Trust headers respected.
