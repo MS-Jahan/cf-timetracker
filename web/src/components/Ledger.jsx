@@ -45,6 +45,9 @@ function currencyFor(entries) {
   return best && best !== "?" ? best : "USD";
 }
 
+// Final entries kept on the same printed page as the total + footer.
+const KEEP_TAIL = 2;
+
 function TagList({ value }) {
   const tags = String(value || "")
     .split(",")
@@ -179,6 +182,30 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, onDupl
   const now = new Date();
   const generatedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
+  const detailRow = (e) => (
+    <tr key={e.id}>
+      <td>{shortDate(e.start_time)}</td>
+      <td>
+        {shortDateTime(e.start_time)}
+        <br />
+        {e.end_time ? shortDateTime(e.end_time) : "-"}
+      </td>
+      <td>
+        <strong>{e.project_name || "-"}</strong>
+        <br />
+        <span className="print-sub">
+          {e.customer_name || "-"} · {e.activity_name || "-"}
+        </span>
+      </td>
+      <td>
+        {e.description || ""}
+        {e.tags ? <span className="print-sub"> [{String(e.tags).split(",").map((t) => t.trim()).filter(Boolean).join(", ")}]</span> : null}
+      </td>
+      <td className="text-right col-nowrap">{formatDuration(e.duration_seconds)}</td>
+      <td className="text-right">{formatMoney(e.cost, e.currency || currency)}</td>
+    </tr>
+  );
+
   return (
     <section>
       {/* Print-only header: CF Time Tracker branding + period info */}
@@ -259,38 +286,22 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, onDupl
                 <th className="text-right">Total</th>
               </tr>
             </thead>
+            {/* Last rows + total + footer share one non-splittable tbody so the total never lands alone on a page. */}
             <tbody>
-              {closed.map((e) => (
-                <tr key={e.id}>
-                  <td>{shortDate(e.start_time)}</td>
-                  <td>
-                    {shortDateTime(e.start_time)}
-                    <br />
-                    {e.end_time ? shortDateTime(e.end_time) : "-"}
-                  </td>
-                  <td>
-                    <strong>{e.project_name || "-"}</strong>
-                    <br />
-                    <span className="print-sub">
-                      {e.customer_name || "-"} · {e.activity_name || "-"}
-                    </span>
-                  </td>
-                  <td>
-                    {e.description || ""}
-                    {e.tags ? <span className="print-sub"> [{String(e.tags).split(",").map((t) => t.trim()).filter(Boolean).join(", ")}]</span> : null}
-                  </td>
-                  <td className="text-right">{formatDuration(e.duration_seconds)}</td>
-                  <td className="text-right">{formatMoney(e.cost, e.currency || currency)}</td>
-                </tr>
-              ))}
+              {closed.slice(0, -KEEP_TAIL).map(detailRow)}
             </tbody>
-            <tfoot>
-              <tr>
+            <tbody className="print-tail">
+              {closed.slice(-KEEP_TAIL).map(detailRow)}
+              <tr className="print-total-row">
                 <td colSpan={4}>Total</td>
-                <td className="text-right">{formatDuration(totalSeconds)}</td>
+                <td className="text-right col-nowrap">{formatDuration(totalSeconds)}</td>
                 <td className="text-right">{formatMoney(totalCost, currency)}</td>
               </tr>
-            </tfoot>
+              {/* Inside the table so it can never be pushed alone onto a fresh page. */}
+              <tr className="print-footer-row">
+                <td colSpan={6}>CF Time Tracker - Timesheet printed on {generatedDate}</td>
+              </tr>
+            </tbody>
           </table>
         </div>
       )}
@@ -408,10 +419,6 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, onDupl
         </table>
       </div>
 
-      {/* Print-only footer */}
-      <div className="print-footer">
-        CF Time Tracker - Timesheet printed on {generatedDate}
-      </div>
     </section>
   );
 }
