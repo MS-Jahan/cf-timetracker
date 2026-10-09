@@ -20,3 +20,6 @@ Freeze the currency on each entry when it is recorded, like the rate:
 
 ## Verification
 Worker unit tests (insert carries currency; edit re-resolves only on client/project change), migration + backfill run on a local D1, then end-to-end: change a client's currency and confirm old entries keep their currency in `/api/bootstrap`, ledger and print.
+
+## Rollout incident (2026-10-09)
+0.18.0 was deployed by CI before the migration was applied to the live D1 databases, so every entry query failed with `no such column: te.currency`. The demo database was additionally missing `projects.currency` (migration `2026-09-20-project-currency.sql` had never been applied there), which made the first attempt at the new migration fail and roll back. Fix: apply `2026-09-20-project-currency.sql` then `2026-10-09-entry-currency.sql` to each live D1, in that order, skipping any already applied. Rule added to `AGENTS.md` (Schema changes): migrate every live D1 before pushing a schema change.

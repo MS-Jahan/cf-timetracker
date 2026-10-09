@@ -88,6 +88,7 @@ Do not introduce top-level folders outside this layout without updating this fil
 ## Conventions
 
 - **Schema changes:** edit `db/schema.sql` for fresh databases *and* add a dated, idempotent script under `db/migrations/` for existing ones (see `2026-09-19-single-running-timer.sql`).
+  - **Deploys do not run migrations.** `deploy.yml` ships the Worker on every push to `main`, so new code that reads a new column 500s (`no such column`) until the migration is applied. Before pushing a schema change, apply every pending migration, in filename order, to **each live D1** (personal `timetracker` and demo `cf-timetracker`): `npx wrangler d1 execute DB [--env demo] --remote --file=db/migrations/<file>.sql`. Check first with `SELECT group_concat(name) FROM pragma_table_info('<table>')`; `ALTER TABLE ... ADD COLUMN` is not repeatable and a failing file rolls back whole. Record it in the commit/PR note.
 - **Time:** `start_time`/`end_time` are Unix epoch **milliseconds**. `duration_seconds` is integer seconds; cost = `duration/3600 * rate_applied`.
 - **IDs:** `crypto.randomUUID()` strings. FKs: `time_entries.customer_id/project_id/activity_id`.
 - **Tags:** stored as comma-separated or JSON-array string; frontend owns parsing, worker stores opaque string.
