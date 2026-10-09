@@ -3,6 +3,9 @@
 All notable changes. Newest first. Rules: `docs/2026-10-09-versioning.md` (SemVer, pre-1.0: `feat` = minor, `fix` = patch; docs/chore/ci do not bump).
 Versions 0.1.0 to 0.15.x were assigned retroactively from commit history on 2026-10-09.
 
+## 0.17.0 - 2026-10-09
+- feat: printed timesheet gets an Hourly rate(s) table built from billed entry rates; Project and Dates worked columns appear only when rates differ by project or change within the period
+
 ## 0.16.1 - 2026-10-09
 - fix: client detail page crashed (`setLoading is not defined`); removed leftover duplicate fetch effect
 

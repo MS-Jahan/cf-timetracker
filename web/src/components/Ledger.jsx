@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { formatDuration, formatMoney, formatPeriod, longDate, longMonth, shortDate, shortDateTime, toHours } from "../lib/format.js";
 import { formatDate, getDateFormat } from "../lib/dateFormat.js";
+import { buildRateRows, shortRange } from "../lib/rates.js";
 import Icon from "./Icon.jsx";
 import { Link } from "../lib/router.jsx";
 
@@ -190,6 +191,11 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, onDupl
     return range || "No entries";
   })();
 
+  const rates = buildRateRows(entries);
+  const multiYear = closed.length > 0 &&
+    new Date(Math.min(...closed.map((e) => e.start_time))).getFullYear() !==
+      new Date(Math.max(...closed.map((e) => e.start_time))).getFullYear();
+
   const generatedDate = longDate(Date.now());
   const ledgerDateFormat = getDateFormat("ledger");
 
@@ -286,6 +292,36 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, onDupl
                 <td className="text-right" style={{ fontFamily: "monospace" }}>{formatMoney(totalCost, currency)}</td>
               </tr>
             </tfoot>
+          </table>
+        </div>
+      )}
+
+      {/* Print-only hourly rates: columns appear only when needed (docs/2026-10-09-print-hourly-rates.md). */}
+      {rates.rows.length > 0 && (
+        <div className="print-summary print-rates">
+          <h2 className="print-section-title">{rates.rows.length === 1 ? "Hourly rate" : "Hourly rates"}</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Client</th>
+                {rates.showProject ? <th>Project</th> : null}
+                {rates.showDates ? <th>Dates worked</th> : null}
+                <th className="text-right">Rate / hour</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rates.rows.map((row, i) => (
+                <tr key={i}>
+                  <td>{row.client}</td>
+                  {rates.showProject ? <td>{row.project ?? "All projects"}</td> : null}
+                  {rates.showDates ? <td>{shortRange(row.from, row.to, multiYear)}</td> : null}
+                  <td className="text-right" style={{ fontFamily: "monospace" }}>
+                    {formatMoney(row.rate, row.currency)}
+                    {row.rate === 0 ? " (not billed)" : ""}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
           </table>
         </div>
       )}
