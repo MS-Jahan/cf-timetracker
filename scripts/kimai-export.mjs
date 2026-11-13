@@ -11,7 +11,8 @@
  *
  * Environment:
  *   TRACKER_URL     e.g. https://timetracker-api.safe-browsing.workers.dev
- *   TRACKER_TOKEN   optional, if the worker has APP_TOKEN set (X-App-Token)
+ *   TRACKER_TOKEN   full-scope API token (Settings -> API tokens), required since 0.21.0;
+ *                   sent as `Authorization: Bearer`
  *   KIMAI_URL       e.g. https://kimai.sabit.dev
  *   KIMAI_USER      Kimai username (profile → API → password/API token)
  *   KIMAI_TOKEN     Kimai API token
@@ -58,7 +59,7 @@ if (missing.length) {
 }
 const dry = env.DRY_RUN === "1";
 const tz = env.KIMAI_TZ || "UTC";
-const trackerHeaders = env.TRACKER_TOKEN ? { "X-App-Token": env.TRACKER_TOKEN } : {};
+const trackerHeaders = env.TRACKER_TOKEN ? { Authorization: `Bearer ${env.TRACKER_TOKEN}` } : {};
 const kimaiHeaders = { "X-AUTH-USER": env.KIMAI_USER, "X-AUTH-TOKEN": env.KIMAI_TOKEN };
 
 // 1. Pull master data + every closed entry from the tracker.

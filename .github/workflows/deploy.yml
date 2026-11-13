@@ -9,6 +9,8 @@ name: Deploy demo
 #   CLOUDFLARE_API_TOKEN  - API token on the contact@sabit.dev account with
 #                           Workers Scripts:Edit, Cloudflare Pages:Edit, D1:Edit
 #   CLOUDFLARE_ACCOUNT_ID - account id of the contact@sabit.dev account
+# Before the first 0.21.0 deploy: apply db/migrations/2026-11-12-auth.sql to the demo D1 and
+# set AUTH_PEPPER + SETUP_TOKEN with --env demo (docs/2026-11-12-auth-and-mcp-blueprint.md §11.2).
 
 on:
   push:
@@ -75,6 +77,8 @@ jobs:
         env:
           # Baked in at build time, see docs/2026-09-20-demo-deploy.md
           VITE_API_BASE: https://cf-timetracker-api.ssarwarjahan.workers.dev
+          # pages.dev and workers.dev are different sites; cookies would be third-party
+          VITE_AUTH_TRANSPORT: bearer
 
       - name: Remove stale Workers-assets deploy config
         run: rm -rf .wrangler dist/wrangler.json

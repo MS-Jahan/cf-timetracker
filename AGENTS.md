@@ -4,13 +4,14 @@ This file guides coding agents working in this repo. Follow it unless the user o
 
 ## Project snapshot
 
-Kimai-style time tracker: **Cloudflare Pages (Vite + React + Tailwind)** → **Cloudflare Worker (REST + MCP JSON-RPC)** → **Cloudflare D1 (SQLite)** → optional **Google Sheets sync via Apps Script webhook**. Protected by **Cloudflare Zero Trust Access**.
+Kimai-style time tracker: **Cloudflare Pages (Vite + React + Tailwind)** → **Cloudflare Worker (REST + MCP JSON-RPC)** → **Cloudflare D1 (SQLite)** → optional **Google Sheets sync via Apps Script webhook**. Protected by built-in **username/password auth** (sessions + API tokens): HttpOnly `tt_session` cookie for the web, `Authorization: Bearer` for native clients, scripts and MCP.
 
 **Versioning (read first, update after every change):** `docs/2026-10-09-versioning.md` — SemVer from root `package.json`, history in `CHANGELOG.md`.
 Foundational spec: `docs/2026-09-19-initial-prompt-system-architecture.md`
 Delivery plan: `docs/2026-09-19-phased-plan.md`
 Checkable work items: `docs/2026-09-19-task-list.md`
 Design deliberation: `docs/2026-09-19-brainstorm-notes.md`
+Auth + authenticated MCP (0.21.0): `docs/2026-11-12-auth-and-mcp-blueprint.md` (design, contracts) and `docs/2026-11-12-auth-and-mcp-task-list.md` (task status)
 
 ## Repo layout (target — create as phases land)
 
@@ -26,9 +27,12 @@ Design deliberation: `docs/2026-09-19-brainstorm-notes.md`
 │   ├── migrations/              # Dated, idempotent ALTER/INDEX scripts for existing DBs
 │   └── seed.sql                 # Dev seed data
 ├── worker/
-│   ├── src/ (index.js router+REST+CORS, core.js D1 ops, mcp.js JSON-RPC)
-│   ├── test/                    # node --test unit tests (`npm test`)
+│   ├── src/ (index.js router+middleware+REST+CORS, core.js D1 ops, mcp.js JSON-RPC,
+│   │         http.js CORS/JSON helpers, auth-crypto.js pure hashing+tokens,
+│   │         auth.js auth D1 ops, auth-routes.js /api/auth/*)
+│   ├── test/                    # node --test unit tests (`npm test`); test/helpers/ = in-memory D1 over the real schema
 │   ├── package.json
+│   ├── .dev.vars.example        # local secrets template (copy to .dev.vars; gitignored)
 │   └── wrangler.toml            # D1 binding `DB`, compat date, routes
 ├── web/                         # Vite + React + Tailwind Pages app
 │   ├── src/ (components/, pages/, lib/, print.css)
@@ -42,7 +46,7 @@ Design deliberation: `docs/2026-09-19-brainstorm-notes.md`
 │   ├── lib/                     # shared Dart UI/API code; no platform forks
 │   ├── test/                    # shared Flutter tests
 │   └── android/ ios/ linux/ macos/ windows/ # generated runners/config only
-└── scripts/                     # CSV export helpers, deploy/verification checks (no secrets)
+└── scripts/                     # verify gate, CSV/Kimai helpers, reset-password.mjs (prints SQL only), deploy/verification checks (no secrets)
 ```
 
 Do not introduce top-level folders outside this layout without updating this file.
@@ -58,12 +62,15 @@ Do not introduce top-level folders outside this layout without updating this fil
 - Runtime: Cloudflare Workers + D1 (SQLite at edge). Frontend: Vite + React + Tailwind + daisyUI, deployed on Pages. Native client: one Flutter project under `apps/timetracker/`, shared across Windows/Linux/Android and compatible with macOS/iOS runners.
 - Toolchain: `wrangler`, `npm`. D1 init: `wrangler d1 execute <DB_NAME> --file=./db/schema.sql`.
 - Local dev: `wrangler dev` (worker), `npm run dev` (web), `cd apps/timetracker && flutter run -d <target> --dart-define=API_BASE_URL=<worker-url>` (native). Verify worker with `curl` against `/api/bootstrap`; verify D1 with `wrangler d1 execute <DB> --command="SELECT 1"`.
-- Verification gate: `npm run verify` (version check, worker unit tests, web production build, and a managed local concurrency check). It starts/stops its own temporary Wrangler server; use `VERIFY_API_BASE=http://127.0.0.1:8787 npm run verify` to target an existing server. Details: `docs/2026-09-19-verification-gate.md`.
-- Tests: `cd worker && npm test` (Node's built-in runner, no framework). The lower-level concurrency check is `node scripts/check-single-timer.mjs [apiBase] [attempts]` and requires a running, seeded API.
-- No committed secrets. GAS webhook URL, Access team config, and D1 IDs go through env / `wrangler secret` / local `.dev.vars` (gitignored).
+- Verification gate: `npm run verify` (version check, worker unit tests, web production build, and a managed local concurrency check). It starts/stops its own temporary Wrangler server on a throwaway local D1 and logs in (or creates) a test-only verify user to get a Bearer token; use `VERIFY_API_BASE=http://127.0.0.1:8787 VERIFY_TOKEN=ttp_... npm run verify` (or `VERIFY_USERNAME`/`VERIFY_PASSWORD`) to target an existing server. Details: `docs/2026-09-19-verification-gate.md`.
+- Tests: `cd worker && npm test` (Node's built-in runner, no framework). The lower-level concurrency check is `TT_TOKEN=ttp_... node scripts/check-single-timer.mjs [apiBase] [attempts]` and requires a running, seeded API. `TT_TOKEN` is a session or full-scope API token; every `/api` route needs one.
+- No committed secrets. GAS webhook URL, `AUTH_PEPPER`/`SETUP_TOKEN`, and D1 IDs go through env / `wrangler secret` / local `.dev.vars` (gitignored). `worker/.dev.vars.example` is the committed template.
+- Auth setup: `AUTH_PEPPER` (>= 32 chars) must be set or every protected route answers 503. First account: `POST /api/auth/setup` with `SETUP_TOKEN`. Password reset: `AUTH_PEPPER=... node scripts/reset-password.mjs <username>` prints an `UPDATE` (and session delete) to run with `wrangler d1 execute`; it never executes SQL itself.
 
 ## API contract (from foundational spec — keep stable)
 
+- **Auth (0.21.0):** every `/api/*` route and `POST /mcp` require a credential, except `OPTIONS`, `GET /api/auth/status`, `POST /api/auth/login|setup|logout` and `GET /api/demo/status`. Credentials: the `tt_session` HttpOnly cookie (web; `transport` defaults to `cookie`), `Authorization: Bearer tts_...` (session; `transport: "token"` returns it in the body), or `Authorization: Bearer ttp_...` (personal API token: scope `full` for `/api/*`, `mcp` or `full` for `/mcp`). Failures: 401 `{ code: "unauthenticated" }` with `WWW-Authenticate`; 403 `insufficient_scope`; 403 `origin_not_allowed` for a cookie write from an origin outside `ALLOWED_ORIGINS` (CSRF); 503 `auth_not_configured` when `AUTH_PEPPER` is missing or short (fail closed). Middleware order and the public allowlist live only in `worker/src/index.js`.
+- **Auth routes (0.21.0):** `GET /api/auth/status` -> `{ configured, setupRequired }`; `POST /api/auth/setup { setupToken, username, password, transport? }` -> 201 (first account only; 403 `invalid_setup_token`/`setup_disabled`, 409 `setup_complete`); `POST /api/auth/login` -> 200 (401 `invalid_credentials`, 429 `too_many_attempts`); `POST /api/auth/logout`; `GET /api/auth/me`; `POST /api/auth/password { currentPassword, newPassword }` (session only; revokes other sessions); `GET|POST /api/auth/tokens` and `DELETE /api/auth/tokens/:id` (session only; the `ttp_...` value is shown once). Auth responses are `Cache-Control: no-store` and never ETagged. Password hashes, token hashes and session ids are never returned.
 - `GET /api/bootstrap` → `{ activeTimer, entries[50], customers, projects, activities, projectTasks }`; `projectTasks` links project IDs to shared task/activity IDs and includes `is_default`. New projects seed `General` and `Meeting` unless `defaultTasks` overrides the list or passes `[]`.
 - `POST /api/timer/start` `{ customerId, projectId, activityId, description?, tags?, hourlyRate? }` → **409** `{ error, code: "timer_running" }` if a timer is already running (previously 400 — changed 2026-09-19), 400 only for validation/unknown-FK problems
 - `POST /api/timer/stop` → computes `duration_seconds`, `cost`; **404** `{ error, code: "no_active_timer" }` if none running (including a lost concurrent stop)
@@ -79,7 +86,7 @@ Do not introduce top-level folders outside this layout without updating this fil
 - `POST /api/voice/parse` `{ audioBase64, mimeType }` → `{ success: true, draft }`; calls Gemini server-side using the `GEMINI_API_KEY` Worker secret, returns 503 when unconfigured, and never creates or starts a time entry. Voice drafts are reviewed in the existing timer form before the user clicks Start.
 - `GET /api/entries?fromMs=&toMs=&limit=&offset=` returns stable paginated closed + running history for native period filters; `fromMs` and `toMs` are optional together and half-open.
   - Optional additive params (0.19.0): `customerId`, `projectId`, `activityId` filters; `before=<start_time>:<id>` keyset cursor (preferred over `offset`: no re-read of skipped rows, stable while entries are added); `lean=1` returns plain entry columns without the name joins (clients resolve names from bootstrap masters, archived included). `paging` = `{ limit, offset, returned, has_more, total, next }`: `total` only on the first page (`null` afterwards), `next` is the cursor for the following page. Without the new params the response is unchanged for existing clients (the Flutter app).
-- **Conditional reads (0.20.0):** every `GET /api/*` (except `/api/rev`, `/api/demo/status`) carries `ETag: "rev-<data_rev>"` and `Cache-Control: no-cache`; a matching `If-None-Match` gets `304` after reading one settings row. Disabled when the revision is 0/unreadable. Because the tag is the write counter, **data changed outside the API (D1 console, ad-hoc SQL) does not invalidate it** - bump the counter afterwards: `INSERT INTO settings (key, value) VALUES ('data_rev', '1') ON CONFLICT(key) DO UPDATE SET value = CAST(value AS INTEGER) + 1`.
+- **Conditional reads (0.20.0, auth 0.21.0):** every authenticated `GET /api/*` (except `/api/rev`, `/api/demo/status`, `/api/auth/*`) carries `ETag: "rev-<data_rev>"`, `Cache-Control: private, no-cache` and `Vary: Origin, Authorization, Cookie`. Auth runs before the 304, so a matching `If-None-Match` still needs a valid credential and gets `304` after reading one settings row. Disabled when the revision is 0/unreadable. Because the tag is the write counter, **data changed outside the API (D1 console, ad-hoc SQL) does not invalidate it** - bump the counter afterwards: `INSERT INTO settings (key, value) VALUES ('data_rev', '1') ON CONFLICT(key) DO UPDATE SET value = CAST(value AS INTEGER) + 1`.
 - **Edit conflicts (0.20.0):** entry objects (list, bootstrap, detail, PATCH/POST responses) carry `version` (opaque hash of the stored fields). `PATCH /api/entries/:id` accepts an optional `ifVersion` and `DELETE /api/entries/:id?ifVersion=` the same: a stale value answers **409** `{ error, code: "entry_changed", entry }` (the latest entry) and nothing is written. Omitting it keeps last-write-wins for older clients.
 - `GET /api/entries/bounds` -> `{ minStart, maxStart }` (earliest/latest entry start, `null` when empty); powers the ledger period picker without downloading history.
 - `GET /api/rev` -> `{ rev }` and `dataRev` in `/api/bootstrap`: a counter bumped by every successful mutation (REST and MCP). Compare it to the value you last rendered to learn that another device changed data (0.18.1).
@@ -87,12 +94,13 @@ Do not introduce top-level folders outside this layout without updating this fil
 - `POST /api/{customers|projects|activities}/:id/archive` and `/restore` soft-archive or restore master data. Bootstrap returns active records for tracker selects plus `archivedCustomers`, `archivedProjects`, and `archivedActivities` for Settings. Historical joins and time entries are never deleted.
 - `GET /api/demo/status` → `{ demoMode: boolean }`. `POST /api/demo/reset` clears time entries and re-seeds the standard demo dataset (2 clients, 3 projects, 4 activities, 5 entries); guarded by `DEMO_MODE` env var, returns 403 when off.
 - Master-data validation lives in `worker/src/core.js` and maps to HTTP 400 / 404 / 409 (`STATUS_CODES`). Timers resolve their rate as `hourlyRate ?? project.rate ?? customer.hourly_rate ?? 0`.
-- `POST /mcp` (JSON-RPC 2.0, `2025-06-18` protocol, plain JSON response — no SSE): `initialize`, `ping`, `tools/list`, `tools/call` for `get_active_timer` / `start_timer` / `stop_timer` / `query_summary`. Unknown method/tool → `-32601`, bad params → `-32602`, business errors → `result.isError`. `query_summary` takes `month` (YYYY-MM, UTC) or `fromMs`/`toMs` (half-open) or neither (all time).
-- CORS: handle `OPTIONS` 204; send `Access-Control-Allow-*` headers including `X-App-Token`. If `APP_TOKEN` is configured, native `/api/*` clients need `X-App-Token` unless the request already carries the Cloudflare Access authenticated-user header. Tighten `Allow-Origin: *` before prod (Zero Trust).
+- `POST /mcp` (JSON-RPC 2.0, `2025-06-18` protocol, plain JSON response — no SSE): `initialize`, `ping`, `tools/list`, `tools/call` for `get_active_timer` / `start_timer` / `stop_timer` / `query_summary`. Unknown method/tool → `-32601`, bad params → `-32602`, business errors → `result.isError`. `query_summary` takes `month` (YYYY-MM, UTC) or `fromMs`/`toMs` (half-open) or neither (all time). Auth (0.21.0): `Authorization: Bearer` only (session `tts_...` or API token `ttp_...`, scope `mcp` or `full`); cookies are not accepted here; `GET /mcp` (any non-POST) answers 405 with `Allow: POST`. Tool names, schemas and result shapes are unchanged.
+- CORS: handle `OPTIONS` 204 (no auth); send `Access-Control-Allow-*` headers including `Authorization` (`X-App-Token`, `APP_TOKEN` and the `Cf-Access-Authenticated-User-Email` bypass are removed). Credentials are allowed only for origins listed in `ALLOWED_ORIGINS`; `*` never carries credentials, so with `*` use the Bearer transport and cookie writes are refused.
 
 ## Conventions
 
 - **Schema changes:** edit `db/schema.sql` for fresh databases *and* add a dated, idempotent script under `db/migrations/` for existing ones (see `2026-09-19-single-running-timer.sql`).
+  - **0.21.0 auth:** `db/migrations/2026-11-12-auth.sql` creates `users`, `sessions`, `api_tokens`, `auth_throttle` (idempotent). Apply it to both live D1s, and set the `AUTH_PEPPER` (and `SETUP_TOKEN`) Worker secrets, before deploying the Worker. Running `schema.sql` on a fresh database already includes these tables.
   - **Deploys do not run migrations.** `deploy.yml` ships the Worker on every push to `main`, so new code that reads a new column 500s (`no such column`) until the migration is applied. Before pushing a schema change, apply every pending migration, in filename order, to **each live D1** (personal `timetracker` and demo `cf-timetracker`): `npx wrangler d1 execute DB [--env demo] --remote --file=db/migrations/<file>.sql`. Check first with `SELECT group_concat(name) FROM pragma_table_info('<table>')`; `ALTER TABLE ... ADD COLUMN` is not repeatable and a failing file rolls back whole. Record it in the commit/PR note.
 - **Time:** `start_time`/`end_time` are Unix epoch **milliseconds**. `duration_seconds` is integer seconds; cost = `duration/3600 * rate_applied`.
 - **IDs:** `crypto.randomUUID()` strings. FKs: `time_entries.customer_id/project_id/activity_id`.
@@ -112,20 +120,20 @@ Do not introduce top-level folders outside this layout without updating this fil
 - **Theming:** daisyUI themes selected by `data-theme` on `<html>`; `web/src/lib/theme.js` is the single writer and also toggles the `.dark` class so `dark:` utilities agree with the active theme. `system` removes `data-theme` entirely and mirrors `prefers-color-scheme` (daisyUI's `--prefersdark`), explicit light/dark set the attribute. The header toggle and the Settings Appearance group both call `applyTheme()`. Per-entity accents come from `web/src/lib/colors.js` using daisyUI tokens (`status-primary`, `badge-soft badge-accent`, `bg-info`) — add literal class strings there, since Tailwind only sees classes it can scan.
 - **Sheets sync:** GAS `TimeEntries` sheet columns: `Entry ID, Date, Customer, Project, Activity, Duration (Hours), Cost, Description, Tags`. Dedupe on `Entry ID` (`gas/Code.gs`, proven by `gas/test/gas-receiver.test.mjs`). The secret travels in the JSON body (`payload.secret`) and is checked against the `SHARED_SECRET` Script Property — fail closed when unset; the `X-Gas-Secret` header is honored only as a fallback. Deploy steps: `docs/2026-09-20-deploy-runbook.md` §4.
 - **MCP:** JSON-RPC 2.0 over Worker route; keep tool schemas backward-compatible; validate `customerId/projectId/activityId`. Timer mutations must go through `worker/src/core.js` so REST and MCP share one implementation — never re-implement start/stop in a handler.
-- **Worker layout:** `worker/src/index.js` (router + REST + CORS), `worker/src/core.js` (D1 operations), `worker/src/mcp.js` (JSON-RPC tools).
+- **Worker layout:** `worker/src/index.js` (router + middleware + REST + CORS), `worker/src/core.js` (D1 operations), `worker/src/mcp.js` (JSON-RPC tools), `worker/src/http.js` (CORS + JSON helpers), `worker/src/auth-crypto.js` (pure WebCrypto: password hashing, tokens; no D1), `worker/src/auth.js` (auth D1 operations), `worker/src/auth-routes.js` (`/api/auth/*` handlers). Auth stays out of `core.js`.
 
 ## Definition of done (per task)
 
 0. **Version:** apply the bump rules in `docs/2026-10-09-versioning.md` (feat = minor, fix = patch, docs/chore/ci = none): edit root `package.json` `version` and add a `CHANGELOG.md` entry in the same commit. `npm run verify` fails if they disagree.
 1. Code + migration (if schema) + seed/update where relevant.
 2. `curl`/smoke test recorded in the PR/task note (bootstrap, start→stop cycle, sync dry-run).
-3. No `*` CORS in prod path, no secrets committed, Zero Trust headers respected.
+3. Auth enforced on every new route (the public allowlist lives only in `index.js`); no secrets committed; no credentialed `*` CORS.
 4. Dated doc updated or new dated follow-up if contract changed.
 
 ## Known gaps for agents to close (do not ignore)
 
 - Closed: `filterMonth` implemented (UTC month slice); MCP handlers + transport decision done (`worker/src/mcp.js`, JSON-RPC POST); validation/FK checks + single-timer guard in REST and MCP via shared `worker/src/core.js`.
-- Still open (owner actions, runbook: `docs/2026-09-20-deploy-runbook.md`): configure `GEMINI_API_KEY` if voice capture is wanted, prod `ALLOWED_ORIGINS` (T-W4/T-Z2), Zero Trust Access apps (T-Z1), remote D1 + deploys + prod smoke (T-Z3), and the real-Sheets acceptance of the deployed GAS Web App (T-G1–G3 E2E). Code-side: all closed — GAS receiver + dedupe + secret done with local proof; B5 closed via soft archive. Follow-ups and deferred scope live in `docs/2026-09-20-follow-ups.md`.
+- Still open (owner actions, runbook: `docs/2026-09-20-deploy-runbook.md`): configure `GEMINI_API_KEY` if voice capture is wanted, prod `ALLOWED_ORIGINS` (T-W4), auth owner actions (`AUTH_PEPPER`/`SETUP_TOKEN` Worker secrets, `2026-11-12-auth.sql` on both D1s, custom API domain; BP §11), remote D1 + deploys + prod smoke (T-Z3), and the real-Sheets acceptance of the deployed GAS Web App (T-G1–G3 E2E). Code-side: all closed — GAS receiver + dedupe + secret done with local proof; B5 closed via soft archive. Follow-ups and deferred scope live in `docs/2026-09-20-follow-ups.md`.
 
 ## Behavioral rules
 

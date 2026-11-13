@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { DATE_FORMATS, getDateFormat, setDateFormat } from "../lib/dateFormat.js";
 import ManagePanel from "../components/ManagePanel.jsx";
+import AccountPanel from "../components/AccountPanel.jsx";
+import ApiTokensPanel from "../components/ApiTokensPanel.jsx";
 import {
   API_BASE,
+  AUTH_TRANSPORT,
   archiveActivity,
   archiveCustomer,
   archiveProject,
@@ -229,6 +232,18 @@ export default function SettingsPage({ themePreference, onThemeChange, demoMode 
         </Section>
       ) : null}
 
+      <Section title="Account" className="no-print">
+        <AccountPanel />
+      </Section>
+
+      <Section
+        title="API tokens & MCP"
+        description="Personal tokens for MCP clients and scripts. A token is shown once."
+        className="no-print"
+      >
+        <ApiTokensPanel />
+      </Section>
+
       <Section title="Connection">
         <dl className="grid gap-x-10 gap-y-5 sm:grid-cols-2">
           {[
@@ -238,6 +253,7 @@ export default function SettingsPage({ themePreference, onThemeChange, demoMode 
               status === "ready" ? "Reachable" : status === "loading" ? "Checking…" : "Unreachable",
             ],
             ["Records", `${customers.length} clients, ${projects.length} projects, ${activities.length} activities`],
+            ["Auth transport", <span className="figure text-sm">{AUTH_TRANSPORT}</span>],
             ["Override", <span className="figure text-sm">VITE_API_BASE</span>],
           ].map(([label, value]) => (
             <div key={label}>

@@ -3,6 +3,12 @@
 All notable changes. Newest first. Rules: `docs/2026-10-09-versioning.md` (SemVer, pre-1.0: `feat` = minor, `fix` = patch; docs/chore/ci do not bump).
 Versions 0.1.0 to 0.15.x were assigned retroactively from commit history on 2026-10-09.
 
+## 0.21.0 - 2026-11-12
+- feat!: BREAKING: username + password authentication replaces Cloudflare Zero Trust reliance. Every `/api/*` route except `/api/auth/status|login|setup|logout` and `/api/demo/status` - and `POST /mcp` - now requires a session (HttpOnly `tt_session` cookie for the web, `Authorization: Bearer` for native/scripts) or a personal API token. `APP_TOKEN`/`X-App-Token` and the `Cf-Access-Authenticated-User-Email` bypass are removed. Passwords: HMAC(`AUTH_PEPPER`) + PBKDF2-SHA256 with per-user salt. New tables via migration `2026-11-12-auth.sql` (apply to both live D1s before deploying). New secrets `AUTH_PEPPER` (required) and `SETUP_TOKEN` (first account).
+- feat: personal API tokens (scope `mcp` or `full`) for MCP clients such as Claude Code (`claude mcp add --transport http ... --header "Authorization: Bearer ttp_..."`); `GET /mcp` answers 405
+- feat: web sign-in/first-account screens, sign out, password change, API token management in Settings; Flutter sign-in screen with secure token storage
+- feat: authed reads send `Cache-Control: private, no-cache`; the 304 path authenticates first
+
 ## 0.20.0 - 2026-10-09
 - feat: read scaling phases 3-4 - `ETag: "rev-N"` + 304 on every API read (one settings row instead of re-running queries); entries carry a `version` and PATCH/DELETE accept `ifVersion`, answering 409 `entry_changed` with the latest entry when another device edited first; the editor reopens on the latest version instead of overwriting
 

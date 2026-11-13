@@ -1,0 +1,5 @@
+# Copy to worker/.dev.vars. Local-only values; never reuse in production.
+AUTH_PEPPER=local-dev-pepper-change-me-0123456789abcdef
+SETUP_TOKEN=local-dev-setup-token-0123456789
+ALLOWED_ORIGINS=http://localhost:5173
+# AUTH_PBKDF2_ITERATIONS=100000
