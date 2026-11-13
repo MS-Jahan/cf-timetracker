@@ -1,12 +1,60 @@
 const API_BASE = (import.meta.env.VITE_API_BASE || "http://localhost:8787").replace(/\/$/, "");
 
+/**
+ * "cookie" (default, same-site API): the HttpOnly session cookie rides along.
+ * "bearer" (demo build, pages.dev vs workers.dev are different sites): the session token
+ * from login is kept in localStorage and sent as `Authorization: Bearer`.
+ */
+export const AUTH_TRANSPORT = import.meta.env.VITE_AUTH_TRANSPORT === "bearer" ? "bearer" : "cookie";
+/** Dispatched on window when the API answers 401 to a credentialed request. */
+export const UNAUTHORIZED_EVENT = "tt:unauthorized";
+/** Streamable HTTP MCP endpoint (for copy-paste client configs in Settings). */
+export const MCP_URL = new URL("/mcp", API_BASE || window.location.origin).href;
+
+const TOKEN_KEY = "cf-tt-session";
+
+// Storage can be blocked (private mode, disabled site data): every access is best-effort.
+function readToken() {
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeToken(token) {
+  try {
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    else localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // Ignore: the request still goes out, the user just has to sign in again later.
+  }
+}
+
+/** Keeps the token returned by login/setup (token transport only). */
+function keepToken(data) {
+  if (data && typeof data.token === "string") writeToken(data.token);
+  return data;
+}
+
 async function request(path, options = {}) {
+  // `auth: false` skips the 401 side effect (sign-out broadcast). It does not drop the
+  // credential: logout and password change need it on the wire.
+  const { auth = true, headers: extraHeaders, ...rest } = options;
+  const headers = { "Content-Type": "application/json", ...(extraHeaders || {}) };
+  const init = { ...rest, headers };
+
+  if (AUTH_TRANSPORT === "bearer") {
+    init.credentials = "omit";
+    const token = readToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+  } else {
+    init.credentials = "include";
+  }
+
   let res;
   try {
-    res = await fetch(`${API_BASE}${path}`, {
-      headers: { "Content-Type": "application/json" },
-      ...options,
-    });
+    res = await fetch(`${API_BASE}${path}`, init);
   } catch (err) {
     throw new Error(`Cannot reach API at ${API_BASE} (${err.message})`);
   }
@@ -27,10 +75,66 @@ async function request(path, options = {}) {
     if (data.code) error.code = data.code;
     // On `entry_changed` the worker returns the latest stored entry for a quick re-review.
     if (data.entry) error.entry = data.entry;
+    // Seconds until a 429 may be retried (rate limit / login throttle).
+    error.retryAfter = Number(res.headers.get("Retry-After")) || null;
+    if (res.status === 401 && auth) {
+      writeToken(null);
+      if (typeof window !== "undefined") window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+    }
     throw error;
   }
   return data;
 }
+
+/** Auth status without a session: `{ configured, setupRequired }`. */
+export const getAuthStatus = () => request("/api/auth/status", { auth: false });
+
+/** Current user for the stored credential: `{ user, auth }`. Throws 401 when signed out. */
+export const getMe = () => request("/api/auth/me");
+
+export const login = (username, password) =>
+  request("/api/auth/login", {
+    method: "POST",
+    auth: false,
+    body: JSON.stringify({ username, password, transport: AUTH_TRANSPORT === "bearer" ? "token" : "cookie" }),
+  }).then(keepToken);
+
+/** First-run only: creates the sole account, guarded by the setup token. */
+export const setupFirstUser = ({ setupToken, username, password }) =>
+  request("/api/auth/setup", {
+    method: "POST",
+    auth: false,
+    body: JSON.stringify({ setupToken, username, password, transport: AUTH_TRANSPORT === "bearer" ? "token" : "cookie" }),
+  }).then(keepToken);
+
+/** Revokes the presented session server-side. The local token is dropped even if the call fails. */
+export const logout = async () => {
+  try {
+    return await request("/api/auth/logout", { method: "POST", auth: false });
+  } finally {
+    writeToken(null);
+  }
+};
+
+/** Changes the password and signs out other sessions. A wrong current password is a plain 401 (no sign-out). */
+export const changePassword = (currentPassword, newPassword) =>
+  request("/api/auth/password", {
+    method: "POST",
+    auth: false,
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+
+export const listApiTokens = () => request("/api/auth/tokens");
+
+/** Returns `{ token, apiToken }`. `token` is shown once; the caller must not persist it. */
+export const createApiToken = ({ name, scope = "mcp", expiresInDays = null }) =>
+  request("/api/auth/tokens", {
+    method: "POST",
+    body: JSON.stringify({ name, scope, expiresInDays }),
+  });
+
+export const revokeApiToken = (id) =>
+  request(`/api/auth/tokens/${encodeURIComponent(id)}`, { method: "DELETE" });
 
 export const getBootstrap = () => request("/api/bootstrap");
 

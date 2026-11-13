@@ -22,7 +22,8 @@ Kimai-style time tracker running entirely on Cloudflare's free tier: **Pages** (
 - **Master data**: clients (currency, default rate), projects (fixed/hourly budgets, per-project curated task lists), activities (emoji, avatars)
 - **47 currencies** with per-client currency and aggregate-currency rollups
 - **Print/PDF timesheet**: professional `window.print()` output with summary tables - no server renderer
-- **MCP server** (`POST /mcp`, JSON-RPC 2.0): `get_active_timer`, `start_timer`, `stop_timer`, `query_summary` - wire the tracker into Claude or any MCP client
+- **MCP server** (`POST /mcp`, JSON-RPC 2.0): `get_active_timer`, `start_timer`, `stop_timer`, `query_summary` - wire the tracker into Claude or any MCP client with a personal API token (see [Authentication](#authentication))
+- **Username + password auth**: sessions for the web, personal API tokens for MCP clients and scripts; no Cloudflare Access required
 - **Google Sheets sync**: Apps Script receiver with Entry-ID dedupe and shared-secret auth
 - **Voice capture**: Gemini turns a short recording into a reviewable timer draft (server-side key, nothing persisted)
 - **Demo mode**: splash screen, demo banner, one-click reset to a seeded dataset
@@ -68,6 +69,7 @@ Cloudflare D1 (SQLite) ── time_entries, customers, projects, activities, pro
 # 1. API
 cd worker
 npm install
+cp .dev.vars.example .dev.vars    # local AUTH_PEPPER / SETUP_TOKEN (gitignored)
 npx wrangler d1 execute DB --local --file=../db/schema.sql
 npm run dev                       # http://localhost:8787
 
@@ -78,6 +80,39 @@ npm run dev                       # http://localhost:5173 (API base defaults to 
 ```
 
 Demo data: `POST http://localhost:8787/api/demo/reset` with `DEMO_MODE=true` in `wrangler.toml`, or `node scripts/seed-demo.mjs`.
+
+## Authentication
+
+Built in: username + password, no Cloudflare Access needed. The web app signs in with an HttpOnly `tt_session` cookie; native apps, scripts and MCP clients send `Authorization: Bearer` (a session token, or a personal API token `ttp_...`). Every `/api/*` route and `POST /mcp` requires one of these, except sign-in/status/setup and the demo status.
+
+**Worker secrets and vars**
+
+- `AUTH_PEPPER` (required, at least 32 characters): `npx wrangler secret put AUTH_PEPPER`. While it is missing or short, protected routes answer 503. Changing it invalidates every password.
+- `SETUP_TOKEN` (at least 24 characters): needed once, to create the first account. Setup is disabled after the first user exists.
+- Optional vars: `AUTH_PBKDF2_ITERATIONS`, `SESSION_TTL_HOURS`, `SESSION_COOKIE_SAMESITE`, `AUTH_IP_LIMIT`. `APP_TOKEN` is no longer used.
+
+**First account** (once per database):
+
+```bash
+curl -s "$API/api/auth/setup" -H 'Content-Type: application/json' \
+  -d '{"setupToken":"<SETUP_TOKEN>","username":"you","password":"<12+ characters>"}'
+```
+
+**Password reset** (needs database access; the script prints SQL and never runs it):
+
+```bash
+AUTH_PEPPER=<pepper> node scripts/reset-password.mjs you            # or add --create
+npx wrangler d1 execute DB --remote --command "<printed SQL>"       # owner action
+```
+
+**MCP clients:** create a token in Settings -> API tokens (scope `mcp`), or with a session via `POST /api/auth/tokens`. The token is shown once.
+
+```bash
+claude mcp add --transport http timetracker https://<api-host>/mcp \
+  --header "Authorization: Bearer ttp_..."
+```
+
+Details, the other client configs and the full contract: [`docs/2026-11-12-auth-and-mcp-blueprint.md`](docs/2026-11-12-auth-and-mcp-blueprint.md) (§6-7).
 
 ## Testing
 
@@ -90,7 +125,7 @@ The concurrency proof (`scripts/check-single-timer.mjs`) starts its own Wrangler
 
 ## Deploy
 
-Full runbooks: [`docs/2026-09-20-demo-deploy.md`](docs/2026-09-20-demo-deploy.md) (demo - what this repo currently runs) and [`docs/2026-09-20-deploy-runbook.md`](docs/2026-09-20-deploy-runbook.md) (production + Zero Trust + rollback). Short version:
+Full runbooks: [`docs/2026-09-20-demo-deploy.md`](docs/2026-09-20-demo-deploy.md) (demo - what this repo currently runs) and [`docs/2026-09-20-deploy-runbook.md`](docs/2026-09-20-deploy-runbook.md) (production + rollback). Short version:
 
 ```bash
 cd worker && npx wrangler deploy
@@ -98,7 +133,7 @@ cd ../web && VITE_API_BASE=https://<worker-url> npm run build \
   && npx wrangler pages deploy dist --project-name cf-timetracker --force
 ```
 
-Secrets (optional): `npx wrangler secret put GAS_SECRET` (Sheets sync), `GEMINI_API_KEY` (voice), and `GEMINI_API_KEYS` (voice; comma-separated fallback list - each key is tried in order, first one that works wins). Nothing secret is committed; local overrides live in `.dev.vars` (gitignored).
+Secrets: `npx wrangler secret put AUTH_PEPPER` (required, see [Authentication](#authentication)), `SETUP_TOKEN` (first account), and optional `GAS_SECRET` (Sheets sync), `GEMINI_API_KEY` (voice), and `GEMINI_API_KEYS` (voice; comma-separated fallback list - each key is tried in order, first one that works wins). Nothing secret is committed; local overrides live in `.dev.vars` (gitignored).
 
 ## API sketch
 
@@ -110,7 +145,9 @@ Secrets (optional): `npx wrangler secret put GAS_SECRET` (Sheets sync), `GEMINI_
 | `GET/POST/PATCH /api/customers|projects|activities` | master-data CRUD + `:id/archive`, `:id/restore` |
 | `PATCH /api/entries/:id` | edit closed entries; duration/cost recomputed server-side |
 | `POST /api/demo/reset` | re-seed demo dataset (403 unless `DEMO_MODE=true`) |
-| `POST /mcp` | JSON-RPC 2.0: `initialize`, `tools/list`, `tools/call` |
+| `POST /api/auth/login`, `/setup`, `/logout`; `GET /api/auth/status`, `/me` | username + password sessions (first account via `SETUP_TOKEN`) |
+| `GET/POST/DELETE /api/auth/tokens` | personal API tokens (session only) |
+| `POST /mcp` | JSON-RPC 2.0: `initialize`, `tools/list`, `tools/call`; Bearer token required, `GET` answers 405 |
 
 ## Docs
 

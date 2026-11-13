@@ -28,13 +28,5 @@ jobs:
         run: npm ci
         working-directory: web
 
-      - name: Prepare local D1 database
-        working-directory: worker
-        run: |
-          # `DB` is the top-level D1 binding in worker/wrangler.toml; the demo
-          # database name `cf-timetracker` only exists under [env.demo].
-          npx wrangler d1 execute DB --local --file=../db/schema.sql --yes
-          npx wrangler d1 execute DB --local --file=../db/seed.sql --yes
-
       - name: Run verification gate
         run: npm run verify

@@ -8,6 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'desktop_tray.dart';
+import 'login_view.dart';
+import 'token_store.dart';
 
 const apiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
@@ -17,7 +19,9 @@ const apiBaseUrl = String.fromEnvironment(
 void main() => runApp(const TimeTrackerApp());
 
 class TimeTrackerApp extends StatefulWidget {
-  const TimeTrackerApp({super.key});
+  const TimeTrackerApp({this.tokenStore, super.key});
+
+  final TokenStore? tokenStore;
 
   @override
   State<TimeTrackerApp> createState() => _TimeTrackerAppState();
@@ -43,6 +47,7 @@ class _TimeTrackerAppState extends State<TimeTrackerApp> {
         useMaterial3: true,
       ),
       home: TrackerShell(
+        tokenStore: widget.tokenStore ?? SecureTokenStore(),
         themeMode: themeMode,
         onThemeChanged: (value) => setState(() => themeMode = value),
       ),
@@ -52,11 +57,13 @@ class _TimeTrackerAppState extends State<TimeTrackerApp> {
 
 class TrackerShell extends StatefulWidget {
   const TrackerShell({
+    required this.tokenStore,
     required this.themeMode,
     required this.onThemeChanged,
     super.key,
   });
 
+  final TokenStore tokenStore;
   final ThemeMode themeMode;
   final ValueChanged<ThemeMode> onThemeChanged;
 
@@ -66,17 +73,20 @@ class TrackerShell extends StatefulWidget {
 
 class _TrackerShellState extends State<TrackerShell> {
   final tray = DesktopTrayController();
-  final client = TrackerApi(apiBaseUrl, String.fromEnvironment('APP_TOKEN'));
+  final client = TrackerApi(apiBaseUrl);
   Bootstrap? bootstrap;
   String configuredApiUrl = apiBaseUrl;
-  String configuredToken = String.fromEnvironment('APP_TOKEN');
   String? error;
+  String? loginError;
   bool loading = true;
+  bool signedIn = false;
   bool busy = false;
   bool miniWindow = false;
   bool alwaysOnTop = false;
   int section = 0;
   String notice = '';
+
+  TokenStore get store => widget.tokenStore;
 
   @override
   void initState() {
@@ -93,25 +103,73 @@ class _TrackerShellState extends State<TrackerShell> {
 
   Future<void> loadConfig() async {
     final prefs = await SharedPreferences.getInstance();
+    // The shared app token is gone; only per-user session tokens are stored now.
+    await prefs.remove('app_token');
     configuredApiUrl = prefs.getString('api_url') ?? apiBaseUrl;
-    configuredToken = prefs.getString('app_token') ?? configuredToken;
-    client.configure(configuredApiUrl, configuredToken);
+    final token = await store.read();
+    client.configure(configuredApiUrl, token ?? '');
+    if (token == null || token.isEmpty) {
+      if (mounted) setState(() => loading = false);
+      return;
+    }
+    signedIn = true;
     await load();
   }
 
-  Future<void> saveConfig(String url, String token) async {
+  Future<void> signIn(String url, String username, String password) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('api_url', url.trim());
-    await prefs.setString('app_token', token.trim());
-    client.configure(url.trim(), token.trim());
-    if (mounted) {
+    configuredApiUrl = url.trim();
+    client.configure(configuredApiUrl, '');
+    try {
+      final issued = await client.login(username, password);
+      await store.write(issued);
+      client.configure(configuredApiUrl, issued);
+      if (!mounted) return;
       setState(() {
-        configuredApiUrl = url.trim();
-        configuredToken = token.trim();
+        signedIn = true;
+        loginError = null;
       });
+      await load();
+    } catch (exception) {
+      if (mounted) setState(() => loginError = exception.toString());
+    }
+  }
+
+  Future<void> signOut() async {
+    await client.logout();
+    await store.clear();
+    client.configure(configuredApiUrl, '');
+    if (!mounted) return;
+    setState(() {
+      signedIn = false;
+      bootstrap = null;
+      loginError = null;
+      notice = '';
+    });
+  }
+
+  Future<void> saveConfig(String url) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('api_url', url.trim());
+    client.configure(url.trim(), client.token);
+    if (mounted) {
+      setState(() => configuredApiUrl = url.trim());
       await load();
       setState(() => notice = 'Connection settings saved.');
     }
+  }
+
+  /// A rejected session ends sign-in; the user must sign in again.
+  Future<void> _expireSession() async {
+    await store.clear();
+    client.configure(configuredApiUrl, '');
+    if (!mounted) return;
+    setState(() {
+      signedIn = false;
+      bootstrap = null;
+      loginError = 'Your session has ended. Sign in again.';
+    });
   }
 
   Future<void> load() async {
@@ -123,6 +181,8 @@ class _TrackerShellState extends State<TrackerShell> {
       final result = await client.bootstrap();
       if (!mounted) return;
       setState(() => bootstrap = result);
+    } on UnauthorizedException {
+      await _expireSession();
     } catch (exception) {
       if (!mounted) return;
       setState(() => error = exception.toString());
@@ -140,6 +200,8 @@ class _TrackerShellState extends State<TrackerShell> {
       await client.start(draft);
       await load();
       if (mounted) setState(() => notice = 'Timer started.');
+    } on UnauthorizedException {
+      await _expireSession();
     } catch (exception) {
       if (mounted) setState(() => error = exception.toString());
     } finally {
@@ -156,6 +218,8 @@ class _TrackerShellState extends State<TrackerShell> {
       await client.stop();
       await load();
       if (mounted) setState(() => notice = 'Entry saved.');
+    } on UnauthorizedException {
+      await _expireSession();
     } catch (exception) {
       if (mounted) setState(() => error = exception.toString());
     } finally {
@@ -165,6 +229,22 @@ class _TrackerShellState extends State<TrackerShell> {
 
   @override
   Widget build(BuildContext context) {
+    // `loading` is true until loadConfig has read the stored token, so the
+    // sign-in screen does not flash on launch for users who are signed in.
+    if (!signedIn && !loading) {
+      return Scaffold(
+        body: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: LoginView(
+              apiUrl: configuredApiUrl,
+              error: loginError,
+              onLogin: signIn,
+            ),
+          ),
+        ),
+      );
+    }
     final wide = MediaQuery.sizeOf(context).width >= 850;
     final titles = ['Dashboard', 'Time entries', 'Settings'];
     final body = loading
@@ -190,8 +270,8 @@ class _TrackerShellState extends State<TrackerShell> {
             onThemeChanged: widget.onThemeChanged,
             onRefresh: load,
             apiUrl: configuredApiUrl,
-            appToken: configuredToken,
             onSaveConfig: saveConfig,
+            onSignOut: signOut,
           );
 
     return Scaffold(
@@ -727,8 +807,8 @@ class SettingsView extends StatefulWidget {
     required this.onThemeChanged,
     required this.onRefresh,
     required this.apiUrl,
-    required this.appToken,
     required this.onSaveConfig,
+    required this.onSignOut,
     super.key,
   });
 
@@ -737,8 +817,8 @@ class SettingsView extends StatefulWidget {
   final ValueChanged<ThemeMode> onThemeChanged;
   final VoidCallback onRefresh;
   final String apiUrl;
-  final String appToken;
-  final Future<void> Function(String url, String token) onSaveConfig;
+  final Future<void> Function(String url) onSaveConfig;
+  final Future<void> Function() onSignOut;
 
   @override
   State<SettingsView> createState() => _SettingsViewState();
@@ -746,20 +826,17 @@ class SettingsView extends StatefulWidget {
 
 class _SettingsViewState extends State<SettingsView> {
   late final TextEditingController url;
-  late final TextEditingController token;
   bool saving = false;
 
   @override
   void initState() {
     super.initState();
     url = TextEditingController(text: widget.apiUrl);
-    token = TextEditingController(text: widget.appToken);
   }
 
   @override
   void dispose() {
     url.dispose();
-    token.dispose();
     super.dispose();
   }
 
@@ -804,16 +881,6 @@ class _SettingsViewState extends State<SettingsView> {
           ),
         ),
         const SizedBox(height: 12),
-        TextField(
-          controller: token,
-          obscureText: true,
-          decoration: const InputDecoration(
-            labelText: 'App token (optional)',
-            helperText:
-                'Use the Worker APP_TOKEN for native clients; never use the Gemini key here.',
-          ),
-        ),
-        const SizedBox(height: 12),
         Wrap(
           spacing: 12,
           children: [
@@ -823,7 +890,7 @@ class _SettingsViewState extends State<SettingsView> {
                   : () async {
                       setState(() => saving = true);
                       try {
-                        await widget.onSaveConfig(url.text, token.text);
+                        await widget.onSaveConfig(url.text);
                       } finally {
                         if (mounted) setState(() => saving = false);
                       }
@@ -840,6 +907,11 @@ class _SettingsViewState extends State<SettingsView> {
               onPressed: () => launchUrl(Uri.parse(url.text)),
               icon: const Icon(Icons.open_in_new),
               label: const Text('Open web app'),
+            ),
+            OutlinedButton.icon(
+              onPressed: widget.onSignOut,
+              icon: const Icon(Icons.logout),
+              label: const Text('Sign out'),
             ),
           ],
         ),
@@ -987,20 +1059,58 @@ class TimerDraft {
   final String tags;
 }
 
+class UnauthorizedException implements Exception {
+  const UnauthorizedException([this.message = 'Signed out']);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 class TrackerApi {
-  TrackerApi(this.baseUrl, [this.appToken = '']);
+  TrackerApi(this.baseUrl, [this.token = '']);
   String baseUrl;
-  String appToken;
+  String token;
 
   void configure(String url, String token) {
     baseUrl = url.replaceFirst(RegExp(r'/$'), '');
-    appToken = token;
+    this.token = token;
   }
 
   Map<String, String> get headers => {
     'Content-Type': 'application/json',
-    if (appToken.isNotEmpty) 'X-App-Token': appToken,
+    if (token.isNotEmpty) 'Authorization': 'Bearer $token',
   };
+
+  Future<String> login(String username, String password) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/auth/login'),
+      headers: headers,
+      body: jsonEncode({
+        'username': username,
+        'password': password,
+        'transport': 'token',
+      }),
+    );
+    if (response.statusCode == 401) {
+      throw Exception('Invalid username or password.');
+    }
+    final body = _decode(response, (body) => body);
+    final issued = body['token'];
+    if (issued is! String || issued.isEmpty) {
+      throw Exception('Sign-in did not return a session.');
+    }
+    return issued;
+  }
+
+  Future<void> logout() async {
+    try {
+      await http.post(Uri.parse('$baseUrl/api/auth/logout'), headers: headers);
+    } catch (_) {
+      // Signing out locally still succeeds when the server is unreachable.
+    }
+  }
 
   Future<Bootstrap> bootstrap() async {
     final response = await http.get(
@@ -1062,13 +1172,24 @@ class TrackerApi {
     http.Response response,
     T Function(Map<String, dynamic>) parser,
   ) {
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode == 401) throw const UnauthorizedException();
+    final body = _parseBody(response.body);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception(
         body['error'] ?? 'Request failed (${response.statusCode})',
       );
     }
     return parser(body);
+  }
+
+  Map<String, dynamic> _parseBody(String raw) {
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) return decoded;
+    } catch (_) {
+      // Non-JSON bodies (proxy pages, empty 204s) fall through to the status error.
+    }
+    return <String, dynamic>{};
   }
 }
 

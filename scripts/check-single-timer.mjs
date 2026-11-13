@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 // Proves the single-active-timer guarantee under concurrency.
 //
-//   node scripts/check-single-timer.mjs [apiBase] [attempts]
+//   TT_TOKEN=ttp_... node scripts/check-single-timer.mjs [apiBase] [attempts]
+//
+// TT_TOKEN is a session token or a full-scope API token (Settings -> API tokens), sent
+// as `Authorization: Bearer`. Every /api route needs it since 0.21.0.
 //
 // Fires N simultaneous POST /api/timer/start requests, then asserts:
 //   1. exactly one returned 200, the rest 409 with code "timer_running"
@@ -20,8 +23,11 @@ const check = (ok, label, detail = "") => {
   if (!ok) failed = true;
 };
 
+const TOKEN = process.env.TT_TOKEN;
+
 async function json(path, options) {
-  const res = await fetch(`${base}${path}`, { headers: { "Content-Type": "application/json" }, ...options });
+  const headers = { "Content-Type": "application/json", ...(TOKEN ? { Authorization: `Bearer ${TOKEN}` } : {}) };
+  const res = await fetch(`${base}${path}`, { headers, ...options });
   const text = await res.text();
   let body;
   try {
@@ -32,7 +38,17 @@ async function json(path, options) {
   return { status: res.status, body };
 }
 
-const bootstrap = await json("/api/bootstrap");
+let bootstrap;
+try {
+  bootstrap = await json("/api/bootstrap");
+} catch (error) {
+  console.error(`Cannot reach ${base} (${error.cause?.code ?? error.message}). Start the worker first.`);
+  process.exit(2);
+}
+if (bootstrap.status === 401) {
+  console.error("Unauthorized: set TT_TOKEN to a session token or a full-scope API token.");
+  process.exit(2);
+}
 if (bootstrap.status !== 200) {
   console.error(`Cannot reach ${base}/api/bootstrap (status ${bootstrap.status}). Start the worker first.`);
   process.exit(2);

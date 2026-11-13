@@ -9,11 +9,13 @@ import Icon from "./components/Icon.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
 import TopTimerBar from "./components/TopTimerBar.jsx";
 import TrackerPage from "./pages/TrackerPage.jsx";
+import LoginPage from "./pages/LoginPage.jsx";
 import SplashScreen from "./components/SplashScreen.jsx";
 import { Link, usePath } from "./lib/router.jsx";
 import { stopTimer, getDemoStatus, resetDemoData as apiResetDemo } from "./lib/api.js";
 import { applyTheme, resolveTheme, storedTheme } from "./lib/theme.js";
 import { useTracker } from "./lib/useTracker.js";
+import { useAuth } from "./lib/useAuth.js";
 
 const NAV = [
   { to: "/", label: "Dashboard", hint: "Overview and reports", icon: "dashboard" },
@@ -43,17 +45,14 @@ function NotFound({ path }) {
   );
 }
 
-export default function App() {
+/** Everything behind sign-in. Mounted only when authenticated, so no tracker data loads earlier. */
+function AuthedApp({ user, onSignOut }) {
   const path = usePath();
   const tracker = useTracker();
   const [themePreference, setThemePreference] = useState(() => storedTheme());
 
   // Demo mode state
   const [demoMode, setDemoMode] = useState(false);
-  const [showSplash, setShowSplash] = useState(() => {
-    // Only show splash once per session
-    try { return !sessionStorage.getItem("cf-tt-splash-seen"); } catch { return true; }
-  });
   const [demoBannerDismissed, setDemoBannerDismissed] = useState(() => {
     try { return sessionStorage.getItem("cf-tt-demo-banner-dismissed") === "1"; } catch { return false; }
   });
@@ -73,11 +72,6 @@ export default function App() {
       setPageKey((k) => k + 1);
     }
   }, [path]);
-
-  const handleSplashDone = useCallback(() => {
-    try { sessionStorage.setItem("cf-tt-splash-seen", "1"); } catch {}
-    setShowSplash(false);
-  }, []);
 
   const handleDismissBanner = useCallback(() => {
     try { sessionStorage.setItem("cf-tt-demo-banner-dismissed", "1"); } catch {}
@@ -124,10 +118,6 @@ export default function App() {
   const activeNav = NAV.find(
     (item) => path === item.to || (item.to !== "/" && path.startsWith(`${item.to}/`))
   )?.to;
-
-  if (showSplash) {
-    return <SplashScreen onDone={handleSplashDone} />;
-  }
 
   // The print view renders bare - no sidebar, timer bar, or banner - so the
   // print dialog only ever sees the timesheet.
@@ -201,6 +191,15 @@ export default function App() {
           <p className="field-label">Appearance</p>
           <ThemeToggle preference={themePreference} onChange={setThemePreference} effective={effective} />
         </div>
+
+        <div className="no-print mt-5 border-t border-base-300 pt-4">
+          <p className="ink-muted truncate text-sm">
+            Signed in as <span className="font-medium text-base-content">{user?.username}</span>
+          </p>
+          <button type="button" className="btn btn-ghost btn-sm mt-2 w-full justify-start" onClick={onSignOut}>
+            Sign out
+          </button>
+        </div>
       </aside>
 
       <section id="main-content" className="min-w-0 flex-1 px-5 pb-16 pt-5 sm:px-8 sm:pt-7" tabIndex="-1">
@@ -251,4 +250,47 @@ export default function App() {
       </main>
     </>
   );
+}
+
+/** Splash once per session, then the auth gate: sign-in or setup screen before the app shell. */
+export default function App() {
+  const [showSplash, setShowSplash] = useState(() => {
+    // Only show splash once per session
+    try { return !sessionStorage.getItem("cf-tt-splash-seen"); } catch { return true; }
+  });
+  const auth = useAuth();
+
+  const handleSplashDone = useCallback(() => {
+    try { sessionStorage.setItem("cf-tt-splash-seen", "1"); } catch {}
+    setShowSplash(false);
+  }, []);
+
+  if (showSplash) {
+    return <SplashScreen onDone={handleSplashDone} />;
+  }
+
+  if (auth.status === "loading") {
+    return (
+      <div className="grid min-h-dvh place-items-center">
+        <span className="loading loading-spinner loading-lg" />
+      </div>
+    );
+  }
+
+  if (auth.status === "error") {
+    return (
+      <div className="grid min-h-dvh place-items-center px-4">
+        <div role="alert" className="alert alert-error max-w-md">
+          <span>Cannot load sign-in: {auth.error}</span>
+          <button type="button" className="btn btn-sm" onClick={auth.refresh}>Retry</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (auth.status !== "authenticated") {
+    return <LoginPage auth={auth} />;
+  }
+
+  return <AuthedApp user={auth.user} onSignOut={auth.signOut} />;
 }
