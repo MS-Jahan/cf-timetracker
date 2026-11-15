@@ -1,5 +1,7 @@
 # Production deploy runbook (T-W4, T-Z1-T-Z3)
 
+> **Update 2026-11-15:** auth is now built in (0.21.0). §2 `APP_TOKEN` and §5 Zero Trust are superseded; follow `docs/2026-11-15-auth-deploy-steps.md` for secrets, migration, first account and smoke test.
+
 **Date:** 2026-09-20
 **Purpose:** every remaining production step, in order, executable by the account owner. Nothing here can be done from this repo alone - each step needs the Cloudflare dashboard or a logged-in `wrangler`.
 
