@@ -93,7 +93,7 @@ The demo is public by design: no login, no API tokens, no MCP, no Google Sheets 
 
 - **Claude Code (MCP client).** In the web app: Settings -> API tokens -> create a token with scope `mcp`; copy the `ttp_...` value (shown once). Then:
   ```
-  claude mcp add --transport http timetracker https://tt-api.sabit.dev/mcp \
+  claude mcp add --transport http cf-timetracker https://tt-api.sabit.dev/mcp \
     --header "Authorization: Bearer ttp_..."
   ```
   The MCP server is the Worker's existing `POST /mcp`; cookies are not accepted there and `GET /mcp` answers 405.

@@ -108,7 +108,7 @@ npx wrangler d1 execute DB --remote --command "<printed SQL>"       # owner acti
 **MCP clients:** create a token in Settings -> API tokens (scope `mcp`), or with a session via `POST /api/auth/tokens`. The token is shown once.
 
 ```bash
-claude mcp add --transport http timetracker https://<api-host>/mcp \
+claude mcp add --transport http cf-timetracker https://<api-host>/mcp \
   --header "Authorization: Bearer ttp_..."
 ```
 
