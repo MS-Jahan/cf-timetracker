@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { formatDuration, formatMoney, formatPeriod, longDate, longMonth, shortDate, shortDateTime, toHours } from "../lib/format.js";
-import { formatDate, getDateFormat } from "../lib/dateFormat.js";
+import { formatDate, formatDateTimeInput, getDateFormat } from "../lib/dateFormat.js";
 import { buildRateRows, shortRange } from "../lib/rates.js";
-import { daysInMonth, wallOf } from "../lib/time.js";
+import { daysInMonth, formatClock, getDefaultTimezone, offsetLabel, wallOf } from "../lib/time.js";
 import Icon from "./Icon.jsx";
 import { Link } from "../lib/router.jsx";
 
@@ -63,6 +63,35 @@ function totalsByCurrency(entries, fallback) {
     t.cost += Number(e.cost || 0);
   }
   return [...map.values()].sort((a, b) => b.cost - a.cost);
+}
+
+/**
+ * Clock range for the Time column, read in the default zone: "09:30–11:00", " +1" when the
+ * end falls on a later calendar day, "09:30 → now" while running. An entry recorded in a
+ * different zone gets a muted city tag; the title spells out both ends and the zone.
+ */
+function TimeCell({ entry, dateFormat }) {
+  const defaultZone = getDefaultTimezone();
+  const start = entry.start_time;
+  const end = entry.end_time;
+  // Calendar-day difference of the two wall readings (pure date arithmetic, no zone involved).
+  const sw = wallOf(start, defaultZone);
+  const ew = end ? wallOf(end, defaultZone) : null;
+  const dayDiff = ew ? Math.round((Date.UTC(ew.year, ew.month - 1, ew.day) - Date.UTC(sw.year, sw.month - 1, sw.day)) / 86_400_000) : 0;
+  const zone = entry.timezone && entry.timezone !== defaultZone ? entry.timezone : null;
+  const city = zone ? zone.split("/").pop().replace(/_/g, " ") : null;
+  const startText = formatClock(start, defaultZone);
+  const endText = end ? formatClock(end, defaultZone) : "now";
+  const range = `${startText}${end ? "–" : " → "}${endText}${dayDiff > 0 ? ` +${dayDiff}` : ""}`;
+  const endFull = end ? formatDateTimeInput(end, dateFormat, defaultZone) : "still running";
+  const titleParts = [`${formatDateTimeInput(start, dateFormat, defaultZone)} → ${endFull}`];
+  if (zone) titleParts.push(`${zone} (${offsetLabel(zone, start)})`);
+  return (
+    <td className="figure ink-muted whitespace-nowrap text-left" title={titleParts.join("\n")}>
+      {range}
+      {city ? <span className="ml-2 font-sans text-xs" title={zone}>{city}</span> : null}
+    </td>
+  );
 }
 
 function TagList({ value }) {
@@ -393,8 +422,9 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, onDupl
 
       {/* Screen: min-width keeps columns from wrapping; narrow screens scroll. */}
       <div className="no-print overflow-x-auto">
-        <table className="table table-sm min-w-[52rem]">
+        <table className="table table-sm min-w-[60rem]">
           <colgroup className="no-print">
+            <col />
             <col />
             <col />
             <col />
@@ -408,6 +438,7 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, onDupl
           <thead>
             <tr className="rule-strong border-b-0">
               <th className="ink-muted text-left font-medium">Date</th>
+              <th className="ink-muted text-left font-medium">Time</th>
               <th className="ink-muted text-left font-medium">Client</th>
               <th className="ink-muted text-left font-medium">Project</th>
               <th className="ink-muted text-left font-medium">Task</th>
@@ -421,7 +452,7 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, onDupl
           <tbody>
             {entries.length === 0 ? (
               <tr className="border-t border-base-300">
-                <td colSpan={9} className="ink-muted whitespace-nowrap py-8">
+                <td colSpan={10} className="ink-muted whitespace-nowrap py-8">
                   {emptyMessage || "No entries in this period. Start a timer above, or choose a wider period."}
                 </td>
               </tr>
@@ -452,6 +483,7 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, onDupl
                     ) : null}
                     {formatDate(e.start_time, ledgerDateFormat)}
                   </td>
+                  <TimeCell entry={e} dateFormat={ledgerDateFormat} />
                   <td className="text-left">
                     {e.customer_id ? <Link className="link link-hover" to={`/clients/${e.customer_id}`}>{e.customer_name || "-"}</Link> : (e.customer_name || "-")}
                   </td>
@@ -499,7 +531,7 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, onDupl
           </tbody>
           <tfoot>
             <tr className="rule-double whitespace-nowrap">
-              <td colSpan={4} className="ink-muted text-left">
+              <td colSpan={5} className="ink-muted text-left">
                 {closed.length} closed {closed.length === 1 ? "entry" : "entries"}
                 {mixedCurrencies ? <span className="no-print"> · amount shown per currency</span> : null}
               </td>

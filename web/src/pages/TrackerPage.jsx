@@ -296,19 +296,20 @@ export default function TrackerPage({ tracker }) {
       <section className="pt-8">
         <div className="filters no-print mb-4 flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
           <div>
-            <h2 className="text-lg font-semibold">Ledger</h2>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <h2 className="text-lg font-semibold">Ledger</h2>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm no-print"
+                disabled={busy || customers.length === 0 || activities.length === 0}
+                onClick={openNewEntry}
+              >
+                <Icon name="plus" size={15} />
+                Add entry
+              </button>
+            </div>
             <p className="ink-muted text-sm">{ledgerSummary}</p>
           </div>
-
-          <button
-            type="button"
-            className="btn btn-sm no-print"
-            disabled={busy || customers.length === 0 || activities.length === 0}
-            onClick={openNewEntry}
-          >
-            <Icon name="plus" size={15} />
-            Add entry
-          </button>
 
           <div className="flex flex-wrap items-end gap-x-5 gap-y-3" aria-label="Ledger filters and exports">
             <div>

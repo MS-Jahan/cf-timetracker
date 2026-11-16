@@ -3,6 +3,10 @@
 All notable changes. Newest first. Rules: `docs/2026-10-09-versioning.md` (SemVer, pre-1.0: `feat` = minor, `fix` = patch; docs/chore/ci do not bump).
 Versions 0.1.0 to 0.15.x were assigned retroactively from commit history on 2026-10-09.
 
+## 0.24.0 - 2026-11-17
+- feat: the ledger shows each entry's time range in a new Time column (`09:30–11:00` in the default zone; `+1` when it ends on a later day, `09:30 → now` for the running entry, a small zone tag when the entry's zone differs from the default, full start/end in the tooltip)
+- fix: the "Add entry" button moved next to the Ledger heading as the primary action instead of floating between the title and the filters
+
 ## 0.23.0 - 2026-11-17
 - feat!: one time zone for all day/month logic. A default zone lives in the database (`settings.default_timezone`, seeded `Asia/Dhaka`, changeable in Settings) and every entry records its own zone (`time_entries.timezone`, NULL = default). Day and month grouping, the dashboard's per-day bars, the week strip, summaries, Sheets sync dates and the MCP `query_summary` now all use the default zone instead of a mix of UTC and the browser's zone. Migration `2026-11-17-entry-timezone.sql` must be applied to both live D1s before deploying.
 - feat: API/MCP accept an optional `timezone` on entry create/edit/timer start; MCP times without an offset (`2026-11-16T09:30`) are now accepted and read in that zone (else the entry's own zone for edits, else the default); `list_entries` returns each entry's `timezone` and `start_local`/`end_local`; `list_catalog` returns `defaultTimezone`. `GET /api/bootstrap` adds `settings.defaultTimezone`; new `PATCH /api/settings`
