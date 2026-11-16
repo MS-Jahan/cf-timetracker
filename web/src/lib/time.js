@@ -42,6 +42,12 @@ export function dayKeyOf(ms, tz = defaultZone) {
   return dayKey(ms, tz);
 }
 
+/** 24-hour "HH:mm" clock reading of an instant in the zone. */
+export function formatClock(ms, tz = defaultZone) {
+  const w = epochToWall(ms, tz);
+  return `${pad(w.hour)}:${pad(w.minute)}`;
+}
+
 /** "YYYY-MM" for the calendar month of an instant. */
 export function monthKeyOf(ms, tz = defaultZone) {
   return monthKey(ms, tz);
