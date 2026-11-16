@@ -1,4 +1,5 @@
 // MCP server (JSON-RPC 2.0 over POST /mcp) - tasks T-M1..T-M4.
+// Requires Authorization: Bearer (session or API token); see docs/2026-11-12-auth-and-mcp-blueprint.md §7.
 //
 // Transport decision (T-M4): a plain JSON-RPC POST is sufficient for v1. The Streamable
 // HTTP transport spec allows a server to answer a POST with a single `application/json`
@@ -184,8 +185,8 @@ export function mcpResponse(body, status = 200) {
   });
 }
 
-/** Handle one POST /mcp body containing a single JSON-RPC message. */
-export async function handleMcp(request, env) {
+/** Handle one POST /mcp body containing a single JSON-RPC message. `auth` is resolved by index.js (unused by tools today). */
+export async function handleMcp(request, env, auth = null) {
   let msg;
   try {
     msg = await request.json();

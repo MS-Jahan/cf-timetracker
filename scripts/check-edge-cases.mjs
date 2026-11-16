@@ -2,7 +2,9 @@
 /**
  * Edge-case pass (task list T-Q1). Requires a running, seeded API:
  *
- *   node scripts/check-edge-cases.mjs [apiBase]        # default http://127.0.0.1:8787
+ *   TT_TOKEN=ttp_... node scripts/check-edge-cases.mjs [apiBase]   # default http://127.0.0.1:8787
+ *
+ * TT_TOKEN is a session token or a full-scope API token, sent as `Authorization: Bearer`.
  *
  * Proves, against the real surface:
  *   1. double start → exactly one 200, the other 409 (code timer_running)
@@ -27,9 +29,11 @@ function check(name, ok, detail = "") {
   if (!ok) failures++;
 }
 
+const TOKEN = process.env.TT_TOKEN;
+
 async function call(path, options = {}) {
   const res = await fetch(`${base}${path}`, {
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(TOKEN ? { Authorization: `Bearer ${TOKEN}` } : {}) },
     ...options,
   });
   let json = null;
@@ -44,6 +48,11 @@ async function main() {
 
   // ---- 0. clean slate: make sure no timer is running --------------------------
   let boot = await call("/api/bootstrap");
+  if (boot.status === 401) {
+    console.error("Unauthorized: set TT_TOKEN to a session token or a full-scope API token.");
+    process.exitCode = 2;
+    return;
+  }
   if (boot.json?.activeTimer) {
     console.log("  note: a timer was already running; stopping it first");
     await call("/api/timer/stop", { method: "POST" });

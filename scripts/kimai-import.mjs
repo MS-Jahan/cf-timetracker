@@ -15,7 +15,8 @@
  *
  * Environment:
  *   TRACKER_URL    e.g. https://timetracker-api.safe-browsing.workers.dev
- *   TRACKER_TOKEN  optional, if the worker has APP_TOKEN set (X-App-Token)
+ *   TRACKER_TOKEN  full-scope API token (Settings -> API tokens), required since 0.21.0;
+ *                  sent as `Authorization: Bearer`
  *   KIMAI_TZ       IANA zone the Kimai export's naive times are in
  *                  (default: Asia/Dhaka - Kimai exports local wall-clock times)
  *   CHUNK          entries per request (default 200, max 1000)
@@ -30,7 +31,7 @@ const fs = await import("node:fs");
 const csvPath = process.argv[2];
 const env = process.env;
 if (!csvPath || !env.TRACKER_URL) {
-  console.error("Usage: TRACKER_URL=... node scripts/kimai-import.mjs kimai-export.csv\nKIMAI_TZ defaults to Asia/Dhaka. CHUNK=200. DRY_RUN=1 previews. TRACKER_TOKEN optional.");
+  console.error("Usage: TRACKER_URL=... node scripts/kimai-import.mjs kimai-export.csv\nKIMAI_TZ defaults to Asia/Dhaka. CHUNK=200. DRY_RUN=1 previews. TRACKER_TOKEN required (API token).");
   process.exit(1);
 }
 const dry = env.DRY_RUN === "1";
@@ -39,7 +40,7 @@ const chunkSize = Math.min(Math.max(Number(env.CHUNK) || 200, 1), 1000);
 // to this machine's zone (usually the same); override with KIMAI_TZ.
 const tz = env.KIMAI_TZ || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 const base = env.TRACKER_URL.replace(/\/$/, "");
-const headers = env.TRACKER_TOKEN ? { "X-App-Token": env.TRACKER_TOKEN, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
+const headers = { "Content-Type": "application/json", ...(env.TRACKER_TOKEN ? { Authorization: `Bearer ${env.TRACKER_TOKEN}` } : {}) };
 
 /* ---------- CSV parsing (RFC-4180-ish: quoted fields, "" escapes, CRLF) ---------- */
 

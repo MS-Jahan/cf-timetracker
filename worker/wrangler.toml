@@ -1,7 +1,9 @@
 # Top-level = personal instance (timetracker.sabit.dev).
 # Demo instance = `npx wrangler deploy --env demo` (cf-timetracker.pages.dev).
-# Secrets are per worker: GAS_SECRET (Sheets sync), GEMINI_API_KEY (voice),
-# APP_TOKEN (optional; native clients must send X-App-Token).
+# Secrets are per worker: AUTH_PEPPER (required; >= 32 chars), SETUP_TOKEN (first-user
+# setup, >= 24 chars), GAS_SECRET (Sheets sync), GEMINI_API_KEY (voice).
+# Optional vars: AUTH_PBKDF2_ITERATIONS, SESSION_TTL_HOURS, SESSION_COOKIE_SAMESITE, AUTH_IP_LIMIT.
+# APP_TOKEN is no longer used (auth is username + password; see docs/2026-11-12-auth-and-mcp-blueprint.md).
 name = "timetracker-api"
 main = "src/index.js"
 compatibility_date = "2026-09-01"
@@ -21,6 +23,13 @@ name = "cf-timetracker-api"
 [env.demo.vars]
 ALLOWED_ORIGINS = "*"
 DEMO_MODE = "true"
+# Same as the built-in defaults; declared so deploys do not drop the dashboard values.
+AUTH_IP_LIMIT = "10"
+AUTH_PBKDF2_ITERATIONS = "100000"
+
+# Demo is open (no accounts) and wipes + re-seeds its data daily at 03:00 UTC.
+[env.demo.triggers]
+crons = ["0 3 * * *"]
 
 [[env.demo.d1_databases]]
 binding = "DB"

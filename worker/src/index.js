@@ -1,6 +1,9 @@
 // cf-timetracker Worker - REST API (spec §2, tasks T-W1..T-W4) + MCP (POST /mcp, T-M1..T-M4).
 // CORS is env-driven via ALLOWED_ORIGINS (comma-separated). "*" allowed only in dev.
 // Timer operations live in ./core.js so REST and MCP share one implementation.
+// Auth (docs/2026-11-12-auth-and-mcp-blueprint.md §6.2): every request except PUBLIC_ROUTES is
+// authenticated BEFORE the ETag/304 check, so a 304 never leaks to an anonymous caller. The public
+// allowlist lives in this file only.
 
 import {
   bumpDataRev,
@@ -36,50 +39,27 @@ import {
   setArchived,
 } from "./core.js";
 import { handleMcp } from "./mcp.js";
-
-const JSON_HEADERS_BASE = {
-  "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Cf-Access-Jwt-Assertion, X-App-Token",
-  "Vary": "Origin",
-};
+import { allowedOrigins, corsHeaders, handleCors, jsonResponse, originAllowed, readJson } from "./http.js";
+import { authConfigured, authenticate } from "./auth.js";
+import { demoGate } from "./demo-limits.js";
+import { handleAuthRoute } from "./auth-routes.js";
 
 /** Maps a core.js result status onto an HTTP status code. */
-const STATUS_CODES = { invalid: 400, conflict: 409, not_found: 404 };
+const STATUS_CODES = { invalid: 400, conflict: 409, not_found: 404, unauthorized: 401, forbidden: 403, rate_limited: 429, unavailable: 503 };
+
+/** Endpoints reachable without a credential (method + path). Everything else needs auth. */
+const PUBLIC_ROUTES = new Set([
+  "GET /api/auth/status", "POST /api/auth/login", "POST /api/auth/setup", "POST /api/auth/logout", "GET /api/demo/status",
+]);
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+const AUTH_HEADER = { "WWW-Authenticate": 'Bearer realm="cf-timetracker"' };
+/** Responses that vary by credential: never shared between users. */
+const PRIVATE_CACHE = { "Cache-Control": "private, no-cache", "Vary": "Origin, Authorization, Cookie" };
 
 /** Matches /api/<collection>/<id> and /api/<collection>. */
 function matchCollection(pathname, collection) {
   const m = pathname.match(new RegExp(`^/api/${collection}(?:/([^/]+))?$`));
   return m ? { id: m[1] ? decodeURIComponent(m[1]) : null } : null;
-}
-
-function corsOrigin(request, env) {
-  const origin = request.headers.get("Origin");
-  const allowed = (env.ALLOWED_ORIGINS || "*").split(",").map((s) => s.trim());
-  if (allowed.includes("*")) return origin || "*";
-  if (origin && allowed.includes(origin)) return origin;
-  return allowed[0] || "";
-}
-
-function jsonResponse(request, env, data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { "Content-Type": "application/json", ...JSON_HEADERS_BASE, "Access-Control-Allow-Origin": corsOrigin(request, env) },
-  });
-}
-
-function handleCors(request, env) {
-  return new Response(null, {
-    status: 204,
-    headers: { ...JSON_HEADERS_BASE, "Access-Control-Allow-Origin": corsOrigin(request, env) },
-  });
-}
-
-async function readJson(request) {
-  try {
-    return await request.json();
-  } catch {
-    return null;
-  }
 }
 
 /** Error body for entry edits: carries `code` and the latest `entry` on an `entry_changed` conflict. */
@@ -95,72 +75,149 @@ const NON_MUTATING_POSTS = new Set(["/api/voice/parse", "/api/sync/google-sheets
 /** GETs that must always hit the Worker (they are the freshness probe itself or static). */
 const UNCACHED_GETS = new Set(["/api/rev", "/api/demo/status"]);
 
-/** Same rule as the gate inside route(): Access header or matching X-App-Token. */
-function isAuthorized(request, env, pathname) {
-  if (!env.APP_TOKEN || !pathname.startsWith("/api/")) return true;
-  return Boolean(request.headers.get("Cf-Access-Authenticated-User-Email")) || request.headers.get("X-App-Token") === env.APP_TOKEN;
-}
+/** True only for the exact string "true" (toml vars are strings; Boolean("false") would be truthy). */
+const isDemoMode = (env) => env.DEMO_MODE === "true";
+
+/** Stand-in credential for the open demo; carries no user and is never produced outside DEMO_MODE. */
+const DEMO_AUTH = Object.freeze({ via: "demo", scope: "full", user: null });
 
 export default {
+  /** Cron (wrangler [triggers]): reset the demo dataset. A no-op unless DEMO_MODE is "true". */
+  async scheduled(_event, env, ctx) {
+    if (!isDemoMode(env)) return;
+    ctx.waitUntil((async () => {
+      await resetDemoData(env);
+      await bumpDataRev(env);
+      // Drop expired rate-limit counters (nothing else prunes auth_throttle on the demo).
+      await env.DB.prepare("DELETE FROM auth_throttle WHERE window_start <= ?").bind(Date.now() - 24 * 3_600_000).run();
+    })());
+  },
+
   async fetch(request, env) {
     const { pathname } = new URL(request.url);
+    const method = request.method;
+    try {
+      // 1. CORS preflight: no auth, any path.
+      if (method === "OPTIONS") return handleCors(request, env);
 
-    // Conditional reads (docs/2026-10-09-read-scaling-plan.md, phase 3): every successful
-    // mutation bumps data_rev, so "rev-N" is a valid ETag for any GET until the next write.
-    // A matching If-None-Match answers 304 after reading one settings row instead of
-    // re-running the queries. rev 0 (no counter row / unreadable) disables the mechanism
-    // so a broken counter can never serve stale data. The rev is read BEFORE the data, so
-    // a racing write can only make the ETag older than the body (an extra revalidation).
-    let etag = null;
-    if (request.method === "GET" && pathname.startsWith("/api/") && !UNCACHED_GETS.has(pathname) && isAuthorized(request, env, pathname)) {
-      const rev = await getDataRev(env);
-      if (rev > 0) {
-        etag = `"rev-${rev}"`;
-        if (request.headers.get("If-None-Match") === etag) {
-          return new Response(null, {
-            status: 304,
-            headers: { ETag: etag, "Cache-Control": "no-cache", ...JSON_HEADERS_BASE, "Access-Control-Allow-Origin": corsOrigin(request, env) },
-          });
+      // 2. MCP is POST-only (Streamable HTTP: no SSE stream, so GET has nothing to answer).
+      if (pathname === "/mcp" && method !== "POST") {
+        return new Response(null, { status: 405, headers: { Allow: "POST" } });
+      }
+
+      // 3. Only the API and MCP exist; anything else is a plain 404 (no auth needed).
+      if (!pathname.startsWith("/api/") && pathname !== "/mcp") {
+        return jsonResponse(request, env, { error: "Route not found" }, 404);
+      }
+
+      // 3b. Demo deployment (DEMO_MODE is the exact string "true"): open, account-less sample
+      // instance. No login, no API tokens, no MCP, no Sheets forwarding. Everything else (add,
+      // edit, delete, timers) works as for a signed-in user; a cron resets the data.
+      const demo = isDemoMode(env);
+      if (demo) {
+        if (pathname === "/mcp") return jsonResponse(request, env, { error: "MCP is not available in the demo", code: "demo_mode" }, 404);
+        if (method === "GET" && pathname === "/api/auth/status") {
+          return jsonResponse(request, env, { configured: true, setupRequired: false, demo: true }, 200, { "Cache-Control": "no-store" });
+        }
+        if (pathname.startsWith("/api/auth/")) return jsonResponse(request, env, { error: "Accounts are disabled in the demo", code: "demo_mode" }, 404);
+        if (pathname === "/api/sync/google-sheets") return jsonResponse(request, env, { error: "Google Sheets sync is disabled in the demo", code: "demo_mode" }, 403);
+        if (pathname === "/api/import/csv") return jsonResponse(request, env, { error: "CSV import is disabled in the demo", code: "demo_mode" }, 403);
+        // Public writes: per-IP rate limit, stricter reset limit, global row caps (demo-limits.js).
+        const blocked = await demoGate(request, env, pathname, method);
+        if (blocked) return jsonResponse(request, env, blocked.body, blocked.status, blocked.headers);
+      }
+
+      // 4. Public routes: no ETag, no data_rev bump.
+      if (PUBLIC_ROUTES.has(`${method} ${pathname}`)) {
+        if (pathname.startsWith("/api/auth/")) return handleAuthRoute(request, env, null);
+        return route(request, env, null);
+      }
+
+      let auth;
+      if (demo) {
+        auth = DEMO_AUTH; // steps 5-8 do not apply: there are no credentials to check
+      } else {
+        // 5. Auth must be configured (pepper set); otherwise nothing can be authorized safely.
+        if (!authConfigured(env)) {
+          return jsonResponse(request, env, { error: "Authentication is not configured on the server", code: "auth_not_configured" }, 503);
+        }
+
+        // 6. Resolve the credential. /mcp never accepts a cookie (no CSRF surface for agents).
+        auth = await authenticate(request, env, { allowCookie: pathname !== "/mcp" });
+        if (!auth) {
+          return jsonResponse(request, env, { error: "Authentication required", code: "unauthenticated" }, 401, AUTH_HEADER);
+        }
+
+        // 7. REST needs a full-scope credential; mcp-scope API tokens are MCP-only.
+        if (pathname.startsWith("/api/") && auth.scope !== "full") {
+          return jsonResponse(request, env, { error: "This token cannot access the REST API", code: "insufficient_scope" }, 403);
+        }
+
+        // 8. CSRF: a cookie session may only make state-changing calls from an allowed origin.
+        if (auth.via === "cookie" && !SAFE_METHODS.has(method) && !originAllowed(request, env)) {
+          return jsonResponse(request, env, { error: "Origin not allowed", code: "origin_not_allowed" }, 403);
         }
       }
-    }
 
-    const response = await route(request, env);
-    if (etag && response.status === 200) {
-      response.headers.set("ETag", etag);
-      response.headers.set("Cache-Control", "no-cache");
+      // 9. MCP: a browser Origin (if sent) must be listed, unless the list contains "*".
+      if (pathname === "/mcp") {
+        const origin = request.headers.get("Origin");
+        if (origin && !originAllowed(request, env) && !allowedOrigins(env).includes("*")) {
+          return jsonResponse(request, env, { error: "Origin not allowed", code: "origin_not_allowed" }, 403);
+        }
+        return handleMcp(request, env, auth);
+      }
+
+      // 10. Protected auth endpoints (me, password, tokens): no ETag, no bump.
+      if (pathname.startsWith("/api/auth/")) return handleAuthRoute(request, env, auth);
+
+      // 11. Conditional reads (docs/2026-10-09-read-scaling-plan.md, phase 3): every successful
+      // mutation bumps data_rev, so "rev-N" is a valid ETag for any GET until the next write.
+      // A matching If-None-Match answers 304 after reading one settings row instead of
+      // re-running the queries. rev 0 (no counter row / unreadable) disables the mechanism
+      // so a broken counter can never serve stale data. The rev is read BEFORE the data, so
+      // a racing write can only make the ETag older than the body (an extra revalidation).
+      let etag = null;
+      if (method === "GET" && !UNCACHED_GETS.has(pathname)) {
+        const rev = await getDataRev(env);
+        if (rev > 0) {
+          etag = `"rev-${rev}"`;
+          if (request.headers.get("If-None-Match") === etag) {
+            return new Response(null, {
+              status: 304,
+              headers: { ETag: etag, ...PRIVATE_CACHE, ...corsHeaders(request, env) },
+            });
+          }
+        }
+      }
+
+      // 12. The route table.
+      const response = await route(request, env, auth);
+
+      // 13. Tagged 200s are private (the body depends on who asked).
+      if (etag && response.status === 200) {
+        response.headers.set("ETag", etag);
+        for (const [k, v] of Object.entries(PRIVATE_CACHE)) response.headers.set(k, v);
+      }
+
+      // 14. Mutating /api/* calls that succeeded advance the data revision.
+      const mutating =
+        method !== "GET" && method !== "OPTIONS" && pathname.startsWith("/api/") && !NON_MUTATING_POSTS.has(pathname);
+      if (mutating && response.status < 400) await bumpDataRev(env);
+      return response;
+    } catch (err) {
+      return jsonResponse(request, env, { error: err.message }, 500);
     }
-    const mutating =
-      request.method !== "GET" && request.method !== "OPTIONS" && pathname.startsWith("/api/") && !NON_MUTATING_POSTS.has(pathname);
-    if (mutating && response.status < 400) await bumpDataRev(env);
-    return response;
   },
 };
 
-async function route(request, env) {
-  if (request.method === "OPTIONS") return handleCors(request, env);
-
+/** Route table. Called only after fetch() has authenticated the request (`auth` is the resolved credential). */
+async function route(request, env, auth) {
   const url = new URL(request.url);
   const method = request.method;
   const pathname = url.pathname;
 
-  // MCP endpoint: JSON-RPC responses are not CORS-wrapped (server-to-server / MCP clients).
-  if (method === "POST" && pathname === "/mcp") {
-    return handleMcp(request, env);
-  }
-
   try {
-    // App-token gate for native clients. When APP_TOKEN is configured, API requests
-    // must carry `X-App-Token` unless they already passed Cloudflare Access (the
-    // browser path). /mcp above is untouched; CORS advertises the header.
-    if (env.APP_TOKEN && pathname.startsWith("/api/")) {
-      const appToken = request.headers.get("X-App-Token");
-      const accessEmail = request.headers.get("Cf-Access-Authenticated-User-Email");
-      if (!accessEmail && appToken !== env.APP_TOKEN) {
-        return jsonResponse(request, env, { error: "Unauthorized: missing or invalid X-App-Token" }, 401);
-      }
-    }
-
     // 0. Cheap change check: clients compare this to the rev they last rendered.
     if (method === "GET" && pathname === "/api/rev") {
       return jsonResponse(request, env, { rev: await getDataRev(env) });
