@@ -27,10 +27,10 @@ function formatUsed(ms) {
 /** Shown once after creation. The raw token lives only in this component's state. */
 function CreatedToken({ token, onDone }) {
   const [copied, setCopied] = useState(null);
-  const addCommand = `claude mcp add --transport http timetracker ${MCP_URL} --header "Authorization: Bearer ${token}"`;
+  const addCommand = `claude mcp add --transport http cf-timetracker ${MCP_URL} --header "Authorization: Bearer ${token}"`;
   const mcpJson = `{
   "mcpServers": {
-    "timetracker": {
+    "cf-timetracker": {
       "type": "http",
       "url": "${MCP_URL}",
       "headers": { "Authorization": "Bearer \${TIMETRACKER_MCP_TOKEN}" }
