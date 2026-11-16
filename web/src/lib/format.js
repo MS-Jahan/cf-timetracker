@@ -1,4 +1,5 @@
 import { dayKeyOf, wallOf } from "./time.js";
+import { formatClockText } from "./timeFormat.js";
 
 export function formatDuration(totalSeconds) {
   const s = Math.max(0, Math.floor(totalSeconds || 0));
@@ -34,7 +35,6 @@ export function formatMoney(value, currency = "USD") {
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const pad2 = (n) => String(n).padStart(2, "0");
 
 /** Short date in the default zone for printed reports: "30 Sep". */
 export function shortDate(ms) {
@@ -42,10 +42,10 @@ export function shortDate(ms) {
   return `${w.day} ${MONTHS[w.month - 1]}`;
 }
 
-/** Short date + 24h time in the default zone for printed reports: "30 Sep 14:05". */
+/** Short date + clock time (per the saved time format) in the default zone for printed reports: "30 Sep 14:05". */
 export function shortDateTime(ms) {
   const w = wallOf(ms);
-  return `${shortDate(ms)} ${pad2(w.hour)}:${pad2(w.minute)}`;
+  return `${shortDate(ms)} ${formatClockText(w.hour, w.minute)}`;
 }
 
 const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];

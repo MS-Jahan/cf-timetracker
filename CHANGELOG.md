@@ -3,6 +3,10 @@
 All notable changes. Newest first. Rules: `docs/2026-10-09-versioning.md` (SemVer, pre-1.0: `feat` = minor, `fix` = patch; docs/chore/ci do not bump).
 Versions 0.1.0 to 0.15.x were assigned retroactively from commit history on 2026-10-09.
 
+## 0.25.0 - 2026-11-17
+- feat: a "Time format" setting (24-hour or 12-hour, Settings, per browser, default 24-hour) that applies to every time of day on screen: the ledger Time column and its tooltip, the printed timesheet Start/Stop cells, the entry editor and the API tokens "last used" time
+- feat: the entry editor (Add entry and Edit) has real pickers: clicking the date opens a calendar (date text stays in the chosen date format), clicking the time opens a custom picker (hour/minute, plus AM/PM in 12-hour mode) that follows the setting instead of the operating system's. Typing still works, and times are parsed in either notation
+
 ## 0.24.0 - 2026-11-17
 - feat: the ledger shows each entry's time range in a new Time column (`09:30–11:00` in the default zone; `+1` when it ends on a later day, `09:30 → now` for the running entry, a small zone tag when the entry's zone differs from the default, full start/end in the tooltip)
 - fix: the "Add entry" button moved next to the Ledger heading as the primary action instead of floating between the title and the filters

@@ -3,6 +3,7 @@
 // browser's zone and never UTC. The default comes from bootstrap (settings.defaultTimezone,
 // stored by getBootstrap in api.js); until a bootstrap has loaded it is UTC.
 import { epochToWall, isValidTimezone, monthKey, monthRangeMs, wallToEpoch, zoneOffsetMs, dayKey } from "./tz.js";
+import { formatClockText } from "./timeFormat.js";
 
 const FALLBACK_ZONE = "UTC";
 const ZONE_KEY = "cf-tt-default-tz";
@@ -42,10 +43,10 @@ export function dayKeyOf(ms, tz = defaultZone) {
   return dayKey(ms, tz);
 }
 
-/** 24-hour "HH:mm" clock reading of an instant in the zone. */
-export function formatClock(ms, tz = defaultZone) {
+/** Clock reading of an instant in the zone: "14:05" or "2:05 PM" per the saved time format (lib/timeFormat.js). */
+export function formatClock(ms, tz = defaultZone, fmt) {
   const w = epochToWall(ms, tz);
-  return `${pad(w.hour)}:${pad(w.minute)}`;
+  return formatClockText(w.hour, w.minute, fmt);
 }
 
 /** "YYYY-MM" for the calendar month of an instant. */

@@ -5,6 +5,7 @@ import {
   MCP_URL,
   revokeApiToken,
 } from "../lib/api.js";
+import { formatDateTimeInput, getDateFormat } from "../lib/dateFormat.js";
 import Icon from "./Icon.jsx";
 
 const EXPIRY_OPTIONS = [
@@ -21,7 +22,7 @@ function formatDay(ms) {
 }
 
 function formatUsed(ms) {
-  return ms ? new Date(ms).toLocaleString() : "Never";
+  return ms ? formatDateTimeInput(ms, getDateFormat("ledger")) : "Never";
 }
 
 /** Shown once after creation. The raw token lives only in this component's state. */
