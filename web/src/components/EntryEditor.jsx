@@ -1,13 +1,26 @@
 import { useEffect, useMemo, useState } from "react";
 import { currencySymbol } from "../lib/currencies.js";
 import { formatDuration, formatMoney } from "../lib/format.js";
-import { dateTimeHint, formatDateTimeInput, getDateFormat, parseDateTimeInput } from "../lib/dateFormat.js";
+import { dateTextToIso, dateTimeHint, formatClockOf, formatDate, getDateFormat, parseDateTimeParts } from "../lib/dateFormat.js";
 import { getDefaultTimezone, offsetLabel, timezoneOptions } from "../lib/time.js";
+import { getTimeFormat, parseClockText } from "../lib/timeFormat.js";
+import DateField from "./DateField.jsx";
+import TimeField from "./TimeField.jsx";
+
+// An instant as the two typed parts (date text and clock text) in the chosen zone.
+function splitInstant(ms, format, zone) {
+  return { date: formatDate(ms, format, zone), clock: formatClockOf(ms, zone) };
+}
 
 // The start and end text are read and written in the entry's zone (its own zone when it has
 // one, otherwise the workspace default). Create mode always uses the default zone.
 function draftFrom(entry, format, creating) {
   const zone = creating ? getDefaultTimezone() : entry.timezone || getDefaultTimezone();
+  const start = splitInstant(entry.start_time, format, zone);
+  // A running entry has no end yet; blank end date and clock mean "keep recording".
+  const end = entry.is_running
+    ? { date: "", clock: "" }
+    : splitInstant(entry.end_time || entry.start_time + 3600000, format, zone);
   return {
     customerId: entry.customer_id,
     projectId: entry.project_id,
@@ -15,9 +28,10 @@ function draftFrom(entry, format, creating) {
     description: entry.description || "",
     tags: entry.tags || "",
     timezone: zone,
-    startTime: formatDateTimeInput(entry.start_time, format, zone),
-    // A running entry has no end yet; an empty field means "keep recording".
-    endTime: entry.is_running ? "" : formatDateTimeInput(entry.end_time || entry.start_time + 3600000, format, zone),
+    startDate: start.date,
+    startClock: start.clock,
+    endDate: end.date,
+    endClock: end.clock,
     hourlyRate: String(entry.rate_applied ?? 0),
   };
 }
@@ -30,6 +44,7 @@ function draftFrom(entry, format, creating) {
 export default function EntryEditor({ entry, mode = "edit", customers, projects, activities, busy, onClose, onSave }) {
   const creating = mode === "create";
   const format = getDateFormat("edit");
+  const timeFormat = getTimeFormat();
   const [draft, setDraft] = useState(() => draftFrom(entry, format, creating));
   const customerProjects = useMemo(
     () => projects.filter((project) => project.customer_id === draft.customerId),
@@ -41,17 +56,21 @@ export default function EntryEditor({ entry, mode = "edit", customers, projects,
   }, [entry, format, creating]);
 
   // Changing the zone keeps the instants: the typed start and end are re-read in the old zone
-  // and written back in the new one. Text that does not parse is left as typed.
+  // and written back in the new one. Parts that do not parse are left as typed.
   const changeZone = (nextZone) => {
     setDraft((current) => {
-      const startInstant = parseDateTimeInput(current.startTime, format, current.timezone);
-      const endInstant = parseDateTimeInput(current.endTime, format, current.timezone);
-      return {
-        ...current,
-        timezone: nextZone,
-        startTime: Number.isFinite(startInstant) ? formatDateTimeInput(startInstant, format, nextZone) : current.startTime,
-        endTime: Number.isFinite(endInstant) ? formatDateTimeInput(endInstant, format, nextZone) : current.endTime,
-      };
+      const next = { ...current, timezone: nextZone };
+      const startInstant = parseDateTimeParts(current.startDate, current.startClock, format, current.timezone);
+      const endInstant = parseDateTimeParts(current.endDate, current.endClock, format, current.timezone);
+      if (Number.isFinite(startInstant)) {
+        const parts = splitInstant(startInstant, format, nextZone);
+        Object.assign(next, { startDate: parts.date, startClock: parts.clock });
+      }
+      if (Number.isFinite(endInstant)) {
+        const parts = splitInstant(endInstant, format, nextZone);
+        Object.assign(next, { endDate: parts.date, endClock: parts.clock });
+      }
+      return next;
     });
   };
 
@@ -62,9 +81,14 @@ export default function EntryEditor({ entry, mode = "edit", customers, projects,
   }, [customerProjects, draft.projectId]);
 
   const running = !creating && Boolean(entry.is_running);
-  const startMs = parseDateTimeInput(draft.startTime, format, draft.timezone);
-  const endMs = parseDateTimeInput(draft.endTime, format, draft.timezone);
-  const keepsRunning = running && draft.endTime === "";
+  const startMs = parseDateTimeParts(draft.startDate, draft.startClock, format, draft.timezone);
+  const endMs = parseDateTimeParts(draft.endDate, draft.endClock, format, draft.timezone);
+  const endBlank = draft.endDate.trim() === "" && draft.endClock.trim() === "";
+  const keepsRunning = running && endBlank;
+  const startDateInvalid = draft.startDate.trim() !== "" && dateTextToIso(draft.startDate, format) === null;
+  const startClockInvalid = draft.startClock.trim() !== "" && parseClockText(draft.startClock) === null;
+  const endDateInvalid = !endBlank && dateTextToIso(draft.endDate, format) === null;
+  const endClockInvalid = !endBlank && parseClockText(draft.endClock) === null;
   const previewSeconds = Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs
     ? Math.max(1, Math.round((endMs - startMs) / 1000))
     : 0;
@@ -102,7 +126,7 @@ export default function EntryEditor({ entry, mode = "edit", customers, projects,
     };
     // Only apply the edit if nobody changed this entry since it was loaded.
     if (entry.version) patch.ifVersion = entry.version;
-    // Blank end on a running entry keeps the clock running; a filled one stops it.
+    // A blank end (date and clock) on a running entry keeps the clock running; a filled one stops it.
     if (!keepsRunning) patch.endTime = endMs;
     onSave(patch);
   };
@@ -174,29 +198,31 @@ export default function EntryEditor({ entry, mode = "edit", customers, projects,
             </label>
           )}
 
-          <label className="field-label">
-            Started
-            <input className={`input figure mt-1 w-full ${draft.startTime && !Number.isFinite(startMs) ? "input-error" : ""}`} type="text"
-              inputMode="numeric" autoComplete="off" value={draft.startTime} placeholder={dateTimeHint(format)}
-              onChange={(event) => set("startTime", event.target.value)} />
-            <span className="ink-muted mt-1 block text-xs font-normal normal-case">{dateTimeHint(format)} (24h)</span>
-          </label>
+          <div>
+            <label className="field-label" htmlFor="entry-start-date">Started</label>
+            <div className="mt-1 flex gap-2">
+              <DateField id="entry-start-date" ariaLabel="Started date" className="min-w-0 flex-1" format={format}
+                value={draft.startDate} invalid={startDateInvalid} onChange={(text) => set("startDate", text)} />
+              <TimeField ariaLabel="Started time" className="w-36 shrink-0" fmt={timeFormat} zone={draft.timezone}
+                value={draft.startClock} invalid={startClockInvalid} onChange={(text) => set("startClock", text)} />
+            </div>
+            <span className="ink-muted mt-1 block text-xs font-normal normal-case">{dateTimeHint(format, timeFormat)}</span>
+          </div>
 
-          <label className="field-label">
-            Ended
-            <input
-              className={`input figure mt-1 w-full ${draft.endTime && !Number.isFinite(endMs) ? "input-error" : ""}`}
-              type="text"
-              inputMode="numeric"
-              autoComplete="off"
-              value={draft.endTime}
-              placeholder={running ? "Still recording" : dateTimeHint(format)}
-              onChange={(event) => set("endTime", event.target.value)}
-            />
+          <div>
+            <label className="field-label" htmlFor="entry-end-date">Ended</label>
+            <div className="mt-1 flex gap-2">
+              <DateField id="entry-end-date" ariaLabel="Ended date" className="min-w-0 flex-1" format={format}
+                value={draft.endDate} invalid={endDateInvalid} onChange={(text) => set("endDate", text)} />
+              <TimeField ariaLabel="Ended time" className="w-36 shrink-0" fmt={timeFormat} zone={draft.timezone}
+                value={draft.endClock} invalid={endClockInvalid} onChange={(text) => set("endClock", text)} />
+            </div>
             <span className="ink-muted mt-1 block text-xs font-normal normal-case">
-              {running ? `Leave empty to keep recording; fill in (${dateTimeHint(format)}) to stop the timer.` : `${dateTimeHint(format)} (24h)`}
+              {running
+                ? `Leave both empty to keep recording; fill in ${dateTimeHint(format, timeFormat)} to stop the timer.`
+                : dateTimeHint(format, timeFormat)}
             </span>
-          </label>
+          </div>
 
           <label className="field-label sm:col-span-2">
             Note

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { DATE_FORMATS, getDateFormat, setDateFormat } from "../lib/dateFormat.js";
+import { getTimeFormat, setTimeFormat, TIME_FORMATS } from "../lib/timeFormat.js";
 import ManagePanel from "../components/ManagePanel.jsx";
 import AccountPanel from "../components/AccountPanel.jsx";
 import ApiTokensPanel from "../components/ApiTokensPanel.jsx";
@@ -64,6 +65,7 @@ export default function SettingsPage({ themePreference, onThemeChange, demoMode 
   } = useTracker();
 
   const [dateFormats, setDateFormats] = useState(() => ({ ledger: getDateFormat("ledger"), edit: getDateFormat("edit") }));
+  const [timeFormatValue, setTimeFormatValue] = useState(() => getTimeFormat());
   const [gasUrl, setGasUrl] = useState(() => localStorage.getItem(GAS_URL_KEY) || "");
   const [syncPeriod, setSyncPeriod] = useState("all");
 
@@ -88,7 +90,7 @@ export default function SettingsPage({ themePreference, onThemeChange, demoMode 
       <header className="pb-6 pt-8">
         <h1 className="text-xl font-semibold">Settings</h1>
         <p className="ink-muted mt-1 max-w-[70ch] text-sm">
-          Appearance and date display are saved in this browser. Everything else changes the shared database.
+          Appearance, date and time display are saved in this browser. Everything else changes the shared database.
         </p>
       </header>
 
@@ -119,7 +121,7 @@ export default function SettingsPage({ themePreference, onThemeChange, demoMode 
         </div>
       </Section>
 
-      <Section title="Date display" description="Saved in this browser. The ledger column and the entry editor can use different formats.">
+      <Section title="Date and time display" description="Saved in this browser. The ledger column and the entry editor can use different date formats; the time format applies everywhere a time of day is shown or typed.">
         <div className="flex flex-wrap gap-x-5 gap-y-4">
           {[["ledger", "Ledger date column"], ["edit", "Edit entry dialog"]].map(([kind, label]) => (
             <div key={kind}>
@@ -139,6 +141,22 @@ export default function SettingsPage({ themePreference, onThemeChange, demoMode 
               </select>
             </div>
           ))}
+          <div>
+            <label className="field-label" htmlFor="tf-clock">Time format</label>
+            <select
+              id="tf-clock"
+              className="select"
+              value={timeFormatValue}
+              onChange={(e) => {
+                setTimeFormat(e.target.value);
+                setTimeFormatValue(getTimeFormat());
+              }}
+            >
+              {Object.entries(TIME_FORMATS).map(([key, f]) => (
+                <option key={key} value={key}>{f.label}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </Section>
 
