@@ -5,7 +5,7 @@ import {
   MCP_URL,
   revokeApiToken,
 } from "../lib/api.js";
-import { formatDateTimeInput, getDateFormat } from "../lib/dateFormat.js";
+import { formatDate, formatDateTimeInput, getDateFormat } from "../lib/dateFormat.js";
 import Icon from "./Icon.jsx";
 
 const EXPIRY_OPTIONS = [
@@ -18,7 +18,7 @@ const EXPIRY_OPTIONS = [
 const SCOPE_LABELS = { mcp: "MCP only", full: "Full access" };
 
 function formatDay(ms) {
-  return ms ? new Date(ms).toLocaleDateString() : "Never";
+  return ms ? formatDate(ms, getDateFormat("ledger")) : "Never";
 }
 
 function formatUsed(ms) {

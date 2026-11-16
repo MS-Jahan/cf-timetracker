@@ -1,8 +1,7 @@
 // Rows for the printed "Hourly rates" table, derived from each closed entry's
 // stored rate_applied. Rules: docs/2026-10-09-print-hourly-rates.md
-import { wallOf } from "./time.js";
+import { formatDate, getDateFormat } from "./dateFormat.js";
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const cents = (rate) => Math.round(Number(rate || 0) * 100);
 
 /** Consecutive same-rate stretches of time-ordered entries. */
@@ -61,15 +60,10 @@ export function buildRateRows(entries) {
   };
 }
 
-/** Short range in the default zone: "5 Sep", "1 – 14 Sep", "28 Sep – 4 Oct"; adds years when withYear. */
-export function shortRange(fromMs, toMs, withYear) {
-  const a = wallOf(fromMs);
-  const b = wallOf(toMs);
-  const day = (d) => `${d.day} ${MONTHS[d.month - 1]}${withYear ? ` ${d.year}` : ""}`;
-  const sameDay = a.year === b.year && a.month === b.month && a.day === b.day;
-  if (sameDay) return day(a);
-  if (a.year === b.year && a.month === b.month) {
-    return `${a.day} – ${day(b)}`;
-  }
-  return `${day(a)} – ${day(b)}`;
+/** Date range in the default zone, each end in the saved display date format ("2026-09-05", "2026-09-01 \u2013 2026-09-14"). `withYear` is kept for callers; formatted dates always carry the year. */
+export function shortRange(fromMs, toMs) {
+  const f = getDateFormat("ledger");
+  const a = formatDate(fromMs, f);
+  const b = formatDate(toMs, f);
+  return a === b ? a : `${a} \u2013 ${b}`;
 }

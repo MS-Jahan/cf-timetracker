@@ -1,4 +1,5 @@
 import { dayKeyOf, wallOf } from "./time.js";
+import { formatDate, getDateFormat } from "./dateFormat.js";
 import { formatClockText } from "./timeFormat.js";
 
 export function formatDuration(totalSeconds) {
@@ -34,15 +35,12 @@ export function formatMoney(value, currency = "USD") {
   return `${currency} ${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 }
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-/** Short date in the default zone for printed reports: "30 Sep". */
+/** Calendar date in the default zone, in the saved display date format (Settings): "2026-09-30". */
 export function shortDate(ms) {
-  const w = wallOf(ms);
-  return `${w.day} ${MONTHS[w.month - 1]}`;
+  return formatDate(ms, getDateFormat("ledger"));
 }
 
-/** Short date + clock time (per the saved time format) in the default zone for printed reports: "30 Sep 14:05". */
+/** Date (saved date format) + clock time (saved time format) in the default zone: "2026-09-30 14:05". */
 export function shortDateTime(ms) {
   const w = wallOf(ms);
   return `${shortDate(ms)} ${formatClockText(w.hour, w.minute)}`;
@@ -56,25 +54,16 @@ export function longMonth(yyyymm) {
   return MONTHS_LONG[Number(m) - 1] ? `${MONTHS_LONG[Number(m) - 1]} ${y}` : yyyymm;
 }
 
-/** Long date in the default zone for printed reports: "9 October 2026". */
+/** Date in the default zone in the saved display date format (printed "generated on" line). */
 export function longDate(ms) {
-  const w = wallOf(ms);
-  return `${w.day} ${MONTHS_LONG[w.month - 1]} ${w.year}`;
+  return formatDate(ms, getDateFormat("ledger"));
 }
 
-/**
- * Compact date range in the default zone for printed reports (en dash):
- * "28 - 30 September 2026", "28 Sep - 4 Oct 2026", "28 Dec 2025 - 3 Jan 2026".
- */
+/** Date range in the default zone, en dash, each end in the saved display date format; one date when both ends fall on the same day. */
 export function formatPeriod(startMs, endMs) {
-  const a = wallOf(Math.min(startMs, endMs));
-  const b = wallOf(Math.max(startMs, endMs));
-  const [ad, am, ay, bd, bm, by] = [a.day, a.month - 1, a.year, b.day, b.month - 1, b.year];
-  if (ay === by && am === bm) {
-    return ad === bd ? `${ad} ${MONTHS_LONG[am]} ${ay}` : `${ad} \u2013 ${bd} ${MONTHS_LONG[am]} ${ay}`;
-  }
-  if (ay === by) return `${ad} ${MONTHS[am]} \u2013 ${bd} ${MONTHS[bm]} ${ay}`;
-  return `${ad} ${MONTHS[am]} ${ay} \u2013 ${bd} ${MONTHS[bm]} ${by}`;
+  const a = formatDate(Math.min(startMs, endMs), getDateFormat("ledger"));
+  const b = formatDate(Math.max(startMs, endMs), getDateFormat("ledger"));
+  return a === b ? a : `${a} \u2013 ${b}`;
 }
 
 export const CSV_COLUMNS = [
