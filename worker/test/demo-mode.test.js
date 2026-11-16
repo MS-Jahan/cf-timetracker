@@ -4,6 +4,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import worker from "../src/index.js";
+import { DEMO_ROW_CAPS } from "../src/demo-limits.js";
 import { createTestEnv, req } from "./helpers/d1-sqlite.js";
 
 const demoEnv = () => createTestEnv({ DEMO_MODE: "true", AUTH_PEPPER: undefined, SETUP_TOKEN: undefined });
@@ -112,5 +113,83 @@ describe("demo mode - scheduled reset", () => {
     env.DB.raw.prepare("INSERT INTO customers (id, name) VALUES ('x', 'Keep Me')").run();
     await runScheduled(env);
     assert.deepEqual(customerNames(env), ["Keep Me"]);
+  });
+});
+
+describe("demo mode - abuse limits", () => {
+  const post = (env, path, body, ip = "203.0.113.7") =>
+    call(env, path, { method: "POST", body, headers: { "CF-Connecting-IP": ip } });
+  const newCustomer = (env, ip) => post(env, "/api/customers", { name: `C ${Math.random()}` }, ip);
+
+  it("rate-limits mutating requests per IP with 429 + Retry-After, never reads", async () => {
+    const env = createTestEnv({ DEMO_MODE: "true", DEMO_WRITE_LIMIT: "3" });
+    for (let i = 0; i < 3; i++) assert.equal((await newCustomer(env)).status, 201);
+    const blocked = await newCustomer(env);
+    assert.equal(blocked.status, 429);
+    assert.equal((await blocked.json()).code, "demo_rate_limited");
+    assert.ok(Number(blocked.headers.get("retry-after")) >= 1);
+    for (let i = 0; i < 10; i++) {
+      assert.equal((await call(env, "/api/bootstrap", { headers: { "CF-Connecting-IP": "203.0.113.7" } })).status, 200);
+    }
+  });
+
+  it("counts each IP separately", async () => {
+    const env = createTestEnv({ DEMO_MODE: "true", DEMO_WRITE_LIMIT: "1" });
+    assert.equal((await newCustomer(env, "198.51.100.1")).status, 201);
+    assert.equal((await newCustomer(env, "198.51.100.1")).status, 429);
+    assert.equal((await newCustomer(env, "198.51.100.2")).status, 201);
+  });
+
+  it("limits the public reset endpoint much harder", async () => {
+    const env = createTestEnv({ DEMO_MODE: "true", DEMO_RESET_LIMIT: "1" });
+    assert.equal((await post(env, "/api/demo/reset")).status, 200);
+    const second = await post(env, "/api/demo/reset");
+    assert.equal(second.status, 429);
+    assert.equal((await second.json()).code, "demo_rate_limited");
+  });
+
+  it("refuses new rows once a table is at its cap, but still allows edits and deletes", async () => {
+    const env = createTestEnv({ DEMO_MODE: "true", DEMO_WRITE_LIMIT: "1000" });
+    const insert = env.DB.raw.prepare("INSERT INTO customers (id, name) VALUES (?, ?)");
+    for (let i = 0; i < DEMO_ROW_CAPS.customers; i++) insert.run(`cap-${i}`, `Cap ${i}`);
+    const full = await newCustomer(env);
+    assert.equal(full.status, 409);
+    assert.equal((await full.json()).code, "demo_limit_reached");
+    const edit = await call(env, "/api/customers/cap-0", { method: "PATCH", body: { name: "Edited" } });
+    assert.equal(edit.status, 200);
+  });
+
+  it("caps time entries on timer start but never blocks stopping a running timer", async () => {
+    const env = createTestEnv({ DEMO_MODE: "true", DEMO_WRITE_LIMIT: "1000" });
+    await runScheduled(env); // seed
+    const start = await call(env, "/api/timer/start", {
+      method: "POST",
+      body: { customerId: "c1111111-1111-4111-8111-111111111111", projectId: "p1111111-1111-4111-8111-111111111111", activityId: "a1111111-1111-4111-8111-111111111111" },
+    });
+    assert.equal(start.status, 200, await start.clone().text());
+    const insert = env.DB.raw.prepare(
+      "INSERT INTO time_entries (id, customer_id, project_id, activity_id, start_time, end_time, duration_seconds, rate_applied, cost, is_running) VALUES (?, 'c1111111-1111-4111-8111-111111111111', 'p1111111-1111-4111-8111-111111111111', 'a1111111-1111-4111-8111-111111111111', 1, 2, 1, 0, 0, 0)"
+    );
+    for (let i = 0; i < DEMO_ROW_CAPS.time_entries; i++) insert.run(`fill-${i}`);
+    const stop = await call(env, "/api/timer/stop", { method: "POST" });
+    assert.equal(stop.status, 200, await stop.clone().text());
+    const again = await call(env, "/api/timer/start", {
+      method: "POST",
+      body: { customerId: "c1111111-1111-4111-8111-111111111111", projectId: "p1111111-1111-4111-8111-111111111111", activityId: "a1111111-1111-4111-8111-111111111111" },
+    });
+    assert.equal(again.status, 409);
+    assert.equal((await again.json()).code, "demo_limit_reached");
+  });
+
+  it("disables bulk CSV import", async () => {
+    const res = await call(createTestEnv({ DEMO_MODE: "true" }), "/api/import/csv", { method: "POST", body: { rows: [] } });
+    assert.equal(res.status, 403);
+    assert.equal((await res.json()).code, "demo_mode");
+  });
+
+  it("does not throttle a non-demo deployment (auth applies instead)", async () => {
+    const env = createTestEnv({ DEMO_MODE: "false", DEMO_WRITE_LIMIT: "1" });
+    for (let i = 0; i < 3; i++) assert.equal((await newCustomer(env)).status, 401);
+    assert.equal(env.DB.raw.prepare("SELECT COUNT(*) c FROM auth_throttle WHERE key LIKE 'demo-%'").get().c, 0);
   });
 });

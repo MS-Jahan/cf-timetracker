@@ -36,6 +36,8 @@ Use a **different** `AUTH_PEPPER` and `SETUP_TOKEN` for personal and demo.
 | `SESSION_TTL_HOURS` | No | `720` (30 days), range 1-2160 | |
 | `SESSION_COOKIE_SAMESITE` | No | `Lax` | Leave alone unless UI and API are on different sites and you insist on cookies (prefer Bearer instead). |
 | `AUTH_IP_LIMIT` | No | `10` | Login attempts per IP per 15 minutes. |
+| `DEMO_WRITE_LIMIT` | No | `60` | Demo only: writes per IP per 10 minutes. |
+| `DEMO_RESET_LIMIT` | No | `3` | Demo only: resets per IP per hour. |
 
 `APP_TOKEN` and `X-App-Token` are **gone**. If `APP_TOKEN` is still set on a Worker, delete it (step 2.7).
 
@@ -80,11 +82,12 @@ Use a **different** `AUTH_PEPPER` and `SETUP_TOKEN` for personal and demo.
 
 The demo is public by design: no login, no API tokens, no MCP, no Google Sheets sync. Visitors can add, edit and delete; voice shows "not configured" because no Gemini key is set. A daily cron (03:00 UTC, `[env.demo.triggers]` in `wrangler.toml`) wipes all clients, projects, activities and entries and re-seeds the sample set. The Reset demo button does the same on demand.
 
-1. Migration: not required for the demo to work in this mode (the auth tables stay unused), but applying `2026-11-12-auth.sql` is harmless and keeps both databases identical.
+1. Migration: apply `2026-11-12-auth.sql` (the demo's rate limiter stores its counters in `auth_throttle`; the other auth tables stay unused).
 2. Secrets: **none needed.** `AUTH_PEPPER` / `SETUP_TOKEN` are ignored on the demo (you may leave or delete them). Do not set `GEMINI_API_KEY` or `GAS_SECRET`.
 3. Merge PR #1. CI (`deploy.yml`) deploys the Worker (registering the cron) and Pages.
 4. Check: `curl -s https://cf-timetracker-api.ssarwarjahan.workers.dev/api/auth/status` -> `{"configured":true,"setupRequired":false,"demo":true}`, then `curl -s .../api/bootstrap` -> 200 without any header.
-5. **Safety:** `DEMO_MODE="true"` makes the whole API public. It must never be set on the personal Worker (top-level `[vars]` has `"false"`); only the exact string `"true"` enables it.
+5. **Abuse limits (built in, no setup; they use the `auth_throttle` table from the migration, so apply it):** each IP gets 60 writes per 10 minutes and 3 resets per hour; the demo holds at most 300 entries, 30 clients, 60 projects and 30 activities (then 409 `demo_limit_reached` until the next reset); CSV import is off. Tune with the optional vars `DEMO_WRITE_LIMIT` and `DEMO_RESET_LIMIT`. If the throttle table is missing the limiter fails open, so apply the migration.
+6. **Safety:** `DEMO_MODE="true"` makes the whole API public. It must never be set on the personal Worker (top-level `[vars]` has `"false"`); only the exact string `"true"` enables it.
 
 ## 4. Clients and automation
 

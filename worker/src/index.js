@@ -41,6 +41,7 @@ import {
 import { handleMcp } from "./mcp.js";
 import { allowedOrigins, corsHeaders, handleCors, jsonResponse, originAllowed, readJson } from "./http.js";
 import { authConfigured, authenticate } from "./auth.js";
+import { demoGate } from "./demo-limits.js";
 import { handleAuthRoute } from "./auth-routes.js";
 
 /** Maps a core.js result status onto an HTTP status code. */
@@ -87,6 +88,8 @@ export default {
     ctx.waitUntil((async () => {
       await resetDemoData(env);
       await bumpDataRev(env);
+      // Drop expired rate-limit counters (nothing else prunes auth_throttle on the demo).
+      await env.DB.prepare("DELETE FROM auth_throttle WHERE window_start <= ?").bind(Date.now() - 24 * 3_600_000).run();
     })());
   },
 
@@ -118,6 +121,10 @@ export default {
         }
         if (pathname.startsWith("/api/auth/")) return jsonResponse(request, env, { error: "Accounts are disabled in the demo", code: "demo_mode" }, 404);
         if (pathname === "/api/sync/google-sheets") return jsonResponse(request, env, { error: "Google Sheets sync is disabled in the demo", code: "demo_mode" }, 403);
+        if (pathname === "/api/import/csv") return jsonResponse(request, env, { error: "CSV import is disabled in the demo", code: "demo_mode" }, 403);
+        // Public writes: per-IP rate limit, stricter reset limit, global row caps (demo-limits.js).
+        const blocked = await demoGate(request, env, pathname, method);
+        if (blocked) return jsonResponse(request, env, blocked.body, blocked.status, blocked.headers);
       }
 
       // 4. Public routes: no ETag, no data_rev bump.

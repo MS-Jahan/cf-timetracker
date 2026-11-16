@@ -1,15 +1,8 @@
 name: Build Flutter Apps
 
 on:
-  push:
-    branches: [main, develop]
-    paths:
-      - 'apps/timetracker/**'
-      - '.github/workflows/build.yml'
-  pull_request:
-    branches: [main]
-    paths:
-      - 'apps/timetracker/**'
+  # Manual only for now: the native app is not part of the web/worker release path, so its
+  # builds must not turn PR checks red. Re-add push/pull_request triggers when Flutter CI is revived.
   workflow_dispatch:
     inputs:
       build_platform:
