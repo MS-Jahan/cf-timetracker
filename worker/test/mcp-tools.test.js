@@ -55,7 +55,7 @@ describe("tools/list", () => {
     assert.deepEqual(names.slice(0, 4), ORIGINAL_FOUR);
     const startTimer = TOOLS.find((t) => t.name === "start_timer");
     assert.deepEqual(startTimer.inputSchema.required, ["customerId", "projectId", "activityId"]);
-    assert.deepEqual(Object.keys(startTimer.inputSchema.properties), ["customerId", "projectId", "activityId", "description", "tags", "hourlyRate"]);
+    assert.deepEqual(Object.keys(startTimer.inputSchema.properties), ["customerId", "projectId", "activityId", "description", "tags", "hourlyRate", "timezone"]);
   });
 
   it("read tools are readOnlyHint, delete is destructiveHint, writes carry no read-only annotation", () => {
@@ -68,14 +68,17 @@ describe("tools/list", () => {
 });
 
 describe("parseTimeInput", () => {
-  it("accepts epoch ms, digit strings of 10+ chars and ISO with offset; rejects offset-less ISO", () => {
+  it("accepts epoch ms, digit strings of 10+ chars and ISO with offset; reads offset-less ISO in the given zone only", () => {
     assert.equal(parseTimeInput(START_MS), START_MS);
     assert.equal(parseTimeInput(String(START_MS)), START_MS);
     assert.equal(parseTimeInput(ISO_OFFSET), START_MS);
+    assert.equal(parseTimeInput(ISO_OFFSET, "America/New_York"), START_MS, "an explicit offset wins over the zone");
     assert.equal(parseTimeInput("2026-11-16T03:30:00Z"), START_MS);
-    assert.equal(parseTimeInput("2026-11-16T09:30:00"), null);
+    assert.equal(parseTimeInput("2026-11-16T09:30:00", "Asia/Dhaka"), START_MS, "09:30 in Dhaka is 03:30Z");
+    assert.equal(parseTimeInput("2026-11-16T09:30:00"), null, "no zone, no instant");
+    assert.equal(parseTimeInput("2026-02-30T09:30:00", "Asia/Dhaka"), null, "impossible dates are rejected");
     assert.equal(parseTimeInput("12345"), null);
-    assert.equal(parseTimeInput("tomorrow"), null);
+    assert.equal(parseTimeInput("tomorrow", "Asia/Dhaka"), null);
   });
 });
 
@@ -130,11 +133,24 @@ describe("add_time_entry", () => {
     assert.equal(out.entry.duration_seconds, 5400);
   });
 
-  it("rejects an ISO string without an offset as -32602 with a clear message", async () => {
+  it("reads an offset-less ISO string in the default zone (Asia/Dhaka in tests) and in an explicit timezone", async () => {
     const ctx = await setup();
-    const out = await call(ctx, "add_time_entry", { ...ctx.ids, startTime: "2026-11-16T09:30:00", endTime: START_MS + 60000 });
-    assert.equal(out.rpcError.code, -32602);
-    assert.match(out.rpcError.message, /UTC offset/);
+    const dhaka = await ok(ctx, "add_time_entry", { ...ctx.ids, startTime: "2026-11-16T09:30:00", durationMinutes: 60 });
+    assert.equal(dhaka.entry.start_time, START_MS);
+    assert.equal(dhaka.entry.timezone, "Asia/Dhaka", "the default zone at creation is stored");
+
+    const ny = await ok(ctx, "add_time_entry", { ...ctx.ids, timezone: "America/New_York", startTime: "2026-11-16T09:30:00", durationMinutes: 60 });
+    assert.equal(ny.entry.start_time, Date.parse("2026-11-16T14:30:00Z"));
+    assert.equal(ny.entry.timezone, "America/New_York");
+  });
+
+  it("rejects an invalid timezone as -32602 and an impossible offset-less date as a parameter error", async () => {
+    const ctx = await setup();
+    const badZone = await call(ctx, "add_time_entry", { ...ctx.ids, timezone: "Mars/Olympus", startTime: START_MS, durationMinutes: 5 });
+    assert.equal(badZone.rpcError.code, -32602);
+    assert.match(badZone.rpcError.message, /IANA/);
+    const badDate = await call(ctx, "add_time_entry", { ...ctx.ids, startTime: "2026-02-30T09:30:00", durationMinutes: 5 });
+    assert.equal(badDate.rpcError.code, -32602);
   });
 
   it("rejects both endTime and durationMinutes, and neither, as -32602", async () => {
@@ -216,12 +232,17 @@ describe("list_entries", () => {
     assert.equal(other.returned, 0);
   });
 
-  it("fromTime and toTime must be given together, and times need an offset", async () => {
+  it("fromTime and toTime must be given together; offset-less times are read in the timezone argument", async () => {
     const ctx = await setup();
     const half = await call(ctx, "list_entries", { fromTime: START_MS });
     assert.equal(half.rpcError.code, -32602);
-    const naive = await call(ctx, "list_entries", { fromTime: "2026-11-16T09:30:00", toTime: START_MS });
-    assert.equal(naive.rpcError.code, -32602);
+    await ok(ctx, "add_time_entry", { ...ctx.ids, startTime: START_MS, durationMinutes: 10 });
+    const dhaka = await ok(ctx, "list_entries", { fromTime: "2026-11-16T09:00:00", toTime: "2026-11-16T10:00:00" });
+    assert.equal(dhaka.returned, 1, "09:00-10:00 Dhaka covers the 03:30Z entry");
+    const ny = await ok(ctx, "list_entries", { fromTime: "2026-11-16T09:00:00", toTime: "2026-11-16T10:00:00", timezone: "America/New_York" });
+    assert.equal(ny.returned, 0, "09:00-10:00 New York is 14:00-15:00Z");
+    const bad = await call(ctx, "list_entries", { fromTime: "2026-11-16T09:00:00", toTime: START_MS, timezone: "Nope/Nope" });
+    assert.equal(bad.rpcError.code, -32602);
   });
 });
 

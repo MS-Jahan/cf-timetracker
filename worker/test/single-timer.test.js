@@ -74,7 +74,7 @@ describe("startTimer", () => {
     assert.equal(result.timer.is_running, 1);
     const [insert] = env.DB.insertCalls();
     assert.ok(insert, "expected an INSERT");
-    assert.match(insert.sql, /VALUES \(\?, \?, \?, \?, \?, \?, \?, \?, \?, 1\)/);
+    assert.match(insert.sql, /VALUES \(\?, \?, \?, \?, \?, \?, \?, \?, \?, \?, 1\)/);
     assert.equal(insert.args[7], 130, "rate should come from the project");
     assert.equal(insert.args[8], "BDT", "currency is frozen on the entry when it starts");
   });

@@ -1,4 +1,5 @@
-import { formatDuration, utcDate } from "../lib/format.js";
+import { formatDuration } from "../lib/format.js";
+import { dayKeyOf } from "../lib/time.js";
 
 /**
  * The punch band, and the one bold place on the page: while a timer runs, the clock
@@ -57,7 +58,7 @@ export default function PunchClock({
           <p className="ink-muted mt-1 text-sm">
             {lastEntry ? (
               <>
-                Last entry: {lastLabel}, {utcDate(lastEntry.end_time || lastEntry.start_time)}.
+                Last entry: {lastLabel}, {dayKeyOf(lastEntry.end_time || lastEntry.start_time)}.
               </>
             ) : (
               "Fill in the line below to start the first entry."

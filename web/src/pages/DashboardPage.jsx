@@ -3,6 +3,7 @@ import RankedBars from "../components/RankedBars.jsx";
 import { getDashboard } from "../lib/api.js";
 import { Link, navigate } from "../lib/router.jsx";
 import { formatDuration, formatMoney } from "../lib/format.js";
+import { currentMonthKey } from "../lib/time.js";
 
 const LAYOUT_KEY = "cf-timetracker:dashboard-layout";
 const DEFAULT_LAYOUT = {
@@ -36,7 +37,7 @@ function readLayout() {
 
 function periodRange(period) {
   if (period === "all") return {};
-  if (period === "month") return { month: new Date().toISOString().slice(0, 7) };
+  if (period === "month") return { month: currentMonthKey() };
   const end = Date.now();
   return { fromMs: end - 30 * 24 * 60 * 60 * 1000, toMs: end };
 }

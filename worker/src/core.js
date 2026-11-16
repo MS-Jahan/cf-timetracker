@@ -1,6 +1,8 @@
 // Shared D1 operations. REST handlers (src/index.js) and MCP tools (src/mcp.js)
 // both call these so validation, rate math and single-timer guarding cannot drift.
 
+import { dayKey, isValidTimezone, monthRangeMs } from "./tz.js";
+
 /** Machine-readable reason codes, surfaced to REST (HTTP status) and MCP (payload). */
 export const ERROR_CODES = {
   TIMER_RUNNING: "timer_running",
@@ -64,7 +66,7 @@ export function entryVersion(row) {
   const text = JSON.stringify([
     row.customer_id, row.project_id, row.activity_id, row.description ?? "", row.tags ?? "",
     row.start_time, row.end_time ?? null, row.duration_seconds ?? 0, row.rate_applied ?? 0,
-    row.cost ?? 0, row.currency ?? null, row.is_running ? 1 : 0,
+    row.cost ?? 0, row.currency ?? null, row.is_running ? 1 : 0, row.timezone ?? null,
   ]);
   let hash = 0x811c9dc5;
   for (let i = 0; i < text.length; i += 1) {
@@ -82,6 +84,40 @@ export async function resolveCurrency(env, projectId, customerId) {
     "SELECT COALESCE(p.currency, c.currency) AS currency FROM customers c LEFT JOIN projects p ON p.id = ? WHERE c.id = ?"
   ).bind(projectId, customerId).first();
   return row?.currency || null;
+}
+
+/** Default zone for every day/month/clock reading; falls back to UTC when unset or unreadable. */
+export async function getDefaultTimezone(env) {
+  try {
+    const row = await env.DB.prepare("SELECT value FROM settings WHERE key = 'default_timezone'").first();
+    if (isValidTimezone(row?.value)) return row.value;
+  } catch {
+    // Missing settings table or row: fall through to UTC.
+  }
+  return "UTC";
+}
+
+const TIMEZONE_ERROR = "timezone must be an IANA time zone name, e.g. Asia/Dhaka";
+
+/** Validate the default zone and persist it (PATCH /api/settings). */
+export async function setDefaultTimezone(env, timezone) {
+  if (!isValidTimezone(timezone)) return { status: "invalid", error: "defaultTimezone must be an IANA time zone name, e.g. Asia/Dhaka" };
+  await env.DB.prepare(
+    "INSERT INTO settings (key, value) VALUES ('default_timezone', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+  ).bind(timezone).run();
+  return { status: "ok", settings: { defaultTimezone: timezone } };
+}
+
+/**
+ * Zone for a create/start/read: an explicit valid IANA name, else the default zone at this moment.
+ * Returns { status: "ok", zone } or { status: "invalid", error }.
+ */
+export async function resolveTimezone(env, value) {
+  if (value === undefined || value === null || value === "") {
+    return { status: "ok", zone: await getDefaultTimezone(env) };
+  }
+  if (!isValidTimezone(value)) return { status: "invalid", error: TIMEZONE_ERROR };
+  return { status: "ok", zone: value };
 }
 
 // Reads below use COALESCE(te.currency, c.currency): rows from older seeds have a NULL
@@ -127,7 +163,7 @@ export async function validateTaskForProject(env, projectId, activityId) {
  * on time_entries(is_running) WHERE is_running = 1: if a concurrent request slipped in
  * between the check and the insert, the insert fails and we return the same conflict.
  */
-export async function startTimer(env, { customerId, projectId, activityId, description, tags, hourlyRate }) {
+export async function startTimer(env, { customerId, projectId, activityId, description, tags, hourlyRate, timezone }) {
   if (!customerId || !projectId || !activityId) {
     return { status: "invalid", error: "customerId, projectId and activityId are required" };
   }
@@ -136,6 +172,8 @@ export async function startTimer(env, { customerId, projectId, activityId, descr
   if (!(await validateTaskForProject(env, projectId, activityId))) {
     return { status: "invalid", error: "activityId is not enabled as a task for this project" };
   }
+  const zone = await resolveTimezone(env, timezone);
+  if (zone.status !== "ok") return zone;
 
   if (await getActiveTimer(env)) {
     return { status: "conflict", error: TIMER_RUNNING_MESSAGE, code: ERROR_CODES.TIMER_RUNNING };
@@ -148,9 +186,9 @@ export async function startTimer(env, { customerId, projectId, activityId, descr
 
   try {
     await env.DB.prepare(`
-      INSERT INTO time_entries (id, customer_id, project_id, activity_id, description, tags, start_time, rate_applied, currency, is_running)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-    `).bind(id, customerId, projectId, activityId, description || "", tags || "", startTime, rate, currency).run();
+      INSERT INTO time_entries (id, customer_id, project_id, activity_id, description, tags, start_time, rate_applied, currency, timezone, is_running)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+    `).bind(id, customerId, projectId, activityId, description || "", tags || "", startTime, rate, currency, zone.zone).run();
   } catch (err) {
     // Lost the race: another request inserted a running row first.
     if (isUniqueViolation(err)) {
@@ -191,13 +229,13 @@ export async function stopTimer(env) {
   return { status: "ok", timer };
 }
 
-/** Half-open UTC [monthStart, nextMonthStart) for a "YYYY-MM" key. */
-export function monthRange(month) {
-  const [y, m] = month.split("-").map(Number);
-  return {
-    startMs: Date.UTC(y, m - 1, 1),
-    endMs: Date.UTC(m === 12 ? y + 1 : y, m === 12 ? 0 : m, 1),
-  };
+/**
+ * Half-open [monthStart, nextMonthStart) for a "YYYY-MM" key, as wall-clock months in `tz`
+ * (callers pass the default zone; UTC keeps the old behaviour).
+ */
+export function monthRange(month, tz = "UTC") {
+  const r = monthRangeMs(month, tz);
+  return { startMs: r?.fromMs, endMs: r?.toMs };
 }
 
 export const isValidMonth = (value) => typeof value === "string" && /^\d{4}-\d{2}$/.test(value);
@@ -213,7 +251,7 @@ export async function querySummary(env, { fromMs, toMs, month } = {}) {
 
   if (month !== undefined && month !== null && month !== "") {
     if (!isValidMonth(month)) return { status: "invalid", error: "month must be YYYY-MM" };
-    ({ startMs: start, endMs: end } = monthRange(month));
+    ({ startMs: start, endMs: end } = monthRange(month, await getDefaultTimezone(env)));
     rangeLabel = month;
   } else if (fromMs !== undefined || toMs !== undefined) {
     if (!Number.isFinite(Number(fromMs)) || !Number.isFinite(Number(toMs))) {
@@ -266,6 +304,20 @@ export async function querySummary(env, { fromMs, toMs, month } = {}) {
   return { status: "ok", rows, totals, range: rangeLabel };
 }
 
+/** Closed-entry rows grouped by their calendar day in `zone`, oldest day first. */
+function groupByDay(rows, zone) {
+  const days = new Map();
+  for (const row of rows) {
+    const day = dayKey(Number(row.start_time), zone);
+    const agg = days.get(day) ?? { day, total_seconds: 0, total_cost: 0, entry_count: 0 };
+    agg.total_seconds += row.duration_seconds || 0;
+    agg.total_cost += row.cost || 0;
+    agg.entry_count += 1;
+    days.set(day, agg);
+  }
+  return [...days.values()].sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
+}
+
 /** Detailed dashboard aggregates, kept separate from the 50-row bootstrap feed. */
 export async function queryDashboard(env, { fromMs, toMs, month } = {}) {
   let start = null;
@@ -274,7 +326,7 @@ export async function queryDashboard(env, { fromMs, toMs, month } = {}) {
 
   if (month !== undefined && month !== null && month !== "") {
     if (!isValidMonth(month)) return { status: "invalid", error: "month must be YYYY-MM" };
-    ({ startMs: start, endMs: end } = monthRange(month));
+    ({ startMs: start, endMs: end } = monthRange(month, await getDefaultTimezone(env)));
     rangeLabel = month;
   } else if (fromMs !== undefined || toMs !== undefined) {
     if (!Number.isFinite(Number(fromMs)) || !Number.isFinite(Number(toMs))) {
@@ -293,18 +345,15 @@ export async function queryDashboard(env, { fromMs, toMs, month } = {}) {
     bind.push(start, end);
   }
   const where = filters.join(" AND ");
+  const zone = await getDefaultTimezone(env);
 
   const [summary, daily, customers, projects, activities] = await Promise.all([
     querySummary(env, { fromMs: start ?? undefined, toMs: end ?? undefined }),
+    // Days are calendar days in the default zone, so grouping happens here rather than in SQL.
     env.DB.prepare(`
-      SELECT date(te.start_time / 1000, 'unixepoch') AS day,
-             SUM(te.duration_seconds) AS total_seconds,
-             SUM(te.cost) AS total_cost,
-             COUNT(*) AS entry_count
+      SELECT te.start_time, te.duration_seconds, te.cost
       FROM time_entries te
       WHERE ${where}
-      GROUP BY day
-      ORDER BY day ASC
     `).bind(...bind).all(),
     env.DB.prepare(`
       SELECT c.id AS customer_id, c.name AS name, c.image_url, COALESCE(te.currency, c.currency) AS currency, SUM(te.duration_seconds) AS total_seconds,
@@ -361,7 +410,7 @@ export async function queryDashboard(env, { fromMs, toMs, month } = {}) {
       average_rate: totalSeconds ? Number((totalCost / (totalSeconds / 3600)).toFixed(2)) : 0,
       average_duration: summary.totals.entry_count ? Math.round(totalSeconds / summary.totals.entry_count) : 0,
     },
-    by_day: mapRows(daily.results),
+    by_day: mapRows(groupByDay(daily.results || [], zone)),
     by_customer: mapRows(customers.results),
     by_project: mapRows(projects.results),
     by_activity: mapRows(activities.results),
@@ -837,6 +886,7 @@ const ENTRY_FIELDS = new Set([
   "startTime",
   "endTime",
   "hourlyRate",
+  "timezone",
 ]);
 
 function asTimestamp(value) {
@@ -1206,6 +1256,8 @@ export async function createTimeEntry(env, body = {}) {
     return { status: "invalid", error: "startTime and endTime must be timestamps in milliseconds" };
   }
   if (endTime <= startTime) return { status: "invalid", error: "endTime must be after startTime" };
+  const zone = await resolveTimezone(env, body.timezone);
+  if (zone.status !== "ok") return zone;
 
   let applied;
   if (body.hourlyRate === undefined) {
@@ -1226,9 +1278,9 @@ export async function createTimeEntry(env, body = {}) {
 
   await env.DB.prepare(`
     INSERT INTO time_entries
-      (id, customer_id, project_id, activity_id, description, tags, start_time, end_time, duration_seconds, rate_applied, cost, currency, is_running)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-  `).bind(id, customerId, projectId, activityId, description, tags, startTime, endTime, durationSeconds, applied, cost, currency).run();
+      (id, customer_id, project_id, activity_id, description, tags, start_time, end_time, duration_seconds, rate_applied, cost, currency, timezone, is_running)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+  `).bind(id, customerId, projectId, activityId, description, tags, startTime, endTime, durationSeconds, applied, cost, currency, zone.zone).run();
 
   const entry = await env.DB.prepare("SELECT * FROM time_entries WHERE id = ?").bind(id).first();
   return { status: "ok", entry: withVersion(entry) };
@@ -1301,6 +1353,14 @@ export async function updateTimeEntry(env, id, fullPatch = {}) {
   const rateError = badRate(rate);
   if (rateError) return { status: "invalid", error: `hourlyRate ${rateError}` };
 
+  // Zone of the entry itself: a valid IANA name, or NULL ("the default zone"). The instants never change.
+  let timezone = current.timezone ?? null;
+  if (patch.timezone !== undefined) {
+    if (patch.timezone === null || patch.timezone === "") timezone = null;
+    else if (!isValidTimezone(patch.timezone)) return { status: "invalid", error: TIMEZONE_ERROR };
+    else timezone = patch.timezone;
+  }
+
   const startTime = asTimestamp(patch.startTime ?? current.start_time);
   if (!Number.isFinite(startTime)) {
     return { status: "invalid", error: "startTime must be a timestamp in milliseconds" };
@@ -1321,10 +1381,10 @@ export async function updateTimeEntry(env, id, fullPatch = {}) {
       const { meta } = await env.DB.prepare(`
         UPDATE time_entries
         SET customer_id = ?, project_id = ?, activity_id = ?, description = ?, tags = ?,
-            start_time = ?, end_time = ?, duration_seconds = ?, rate_applied = ?, cost = ?, currency = ?, is_running = 0
+            start_time = ?, end_time = ?, duration_seconds = ?, rate_applied = ?, cost = ?, currency = ?, timezone = ?, is_running = 0
         WHERE id = ? AND is_running = 1
       `)
-        .bind(customerId, projectId, activityId, description, tags, startTime, endTime, durationSeconds, rate, cost, currency, id)
+        .bind(customerId, projectId, activityId, description, tags, startTime, endTime, durationSeconds, rate, cost, currency, timezone, id)
         .run();
       if (!meta?.changes) {
         return { status: "conflict", error: "The timer was already stopped; reload and try again" };
@@ -1333,10 +1393,10 @@ export async function updateTimeEntry(env, id, fullPatch = {}) {
       const { meta } = await env.DB.prepare(`
         UPDATE time_entries
         SET customer_id = ?, project_id = ?, activity_id = ?, description = ?, tags = ?,
-            start_time = ?, rate_applied = ?, currency = ?
+            start_time = ?, rate_applied = ?, currency = ?, timezone = ?
         WHERE id = ? AND is_running = 1
       `)
-        .bind(customerId, projectId, activityId, description, tags, startTime, rate, currency, id)
+        .bind(customerId, projectId, activityId, description, tags, startTime, rate, currency, timezone, id)
         .run();
       if (!meta?.changes) {
         return { status: "conflict", error: "The timer was already stopped; reload and try again" };
@@ -1360,10 +1420,10 @@ export async function updateTimeEntry(env, id, fullPatch = {}) {
   await env.DB.prepare(`
     UPDATE time_entries
     SET customer_id = ?, project_id = ?, activity_id = ?, description = ?, tags = ?,
-        start_time = ?, end_time = ?, duration_seconds = ?, rate_applied = ?, cost = ?, currency = ?
+        start_time = ?, end_time = ?, duration_seconds = ?, rate_applied = ?, cost = ?, currency = ?, timezone = ?
     WHERE id = ? AND is_running = 0
   `)
-    .bind(customerId, projectId, activityId, description, tags, startTime, endTime, durationSeconds, rate, cost, currency, id)
+    .bind(customerId, projectId, activityId, description, tags, startTime, endTime, durationSeconds, rate, cost, currency, timezone, id)
     .run();
 
   return {
@@ -1460,6 +1520,7 @@ export async function importCsvBatch(env, payload = {}) {
   // Existing-entry dedupe keys: (project, activity, start).
   const existing = new Set();
   const currencyCache = new Map();
+  const importZone = await getDefaultTimezone(env);
   if (!dryRun) {
     const { results } = await env.DB.prepare("SELECT project_id, activity_id, start_time FROM time_entries").all();
     for (const row of results) existing.add(`${row.project_id}|${row.activity_id}|${row.start_time}`);
@@ -1500,11 +1561,11 @@ export async function importCsvBatch(env, payload = {}) {
     if (!currencyCache.has(currencyKey)) currencyCache.set(currencyKey, await resolveCurrency(env, projectIdValue, customerIdValue));
     inserts.push(
       env.DB.prepare(
-        "INSERT INTO time_entries (id, customer_id, project_id, activity_id, description, tags, start_time, end_time, duration_seconds, rate_applied, cost, currency, is_running) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)"
+        "INSERT INTO time_entries (id, customer_id, project_id, activity_id, description, tags, start_time, end_time, duration_seconds, rate_applied, cost, currency, timezone, is_running) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)"
       ).bind(
         crypto.randomUUID(), customerIdValue, projectIdValue, activityIdValue,
         String(row.description ?? ""), String(row.tags ?? ""),
-        startTime, endTime, durationSeconds, rate, cost, currencyCache.get(currencyKey)
+        startTime, endTime, durationSeconds, rate, cost, currencyCache.get(currencyKey), importZone
       )
     );
   }

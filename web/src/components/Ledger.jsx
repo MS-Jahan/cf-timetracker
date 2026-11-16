@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { formatDuration, formatMoney, formatPeriod, longDate, longMonth, shortDate, shortDateTime, toHours } from "../lib/format.js";
 import { formatDate, getDateFormat } from "../lib/dateFormat.js";
 import { buildRateRows, shortRange } from "../lib/rates.js";
+import { daysInMonth, wallOf } from "../lib/time.js";
 import Icon from "./Icon.jsx";
 import { Link } from "../lib/router.jsx";
 
@@ -195,13 +196,14 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, onDupl
     if (scopeLabel && /\b\d{4}-\d{2}\b/.test(scopeLabel)) return scopeLabel.replace(/\b(\d{4}-\d{2})\b/g, (m) => longMonth(m));
     let range = "";
     if (closed.length) {
-      const first = new Date(Math.min(...closed.map((e) => e.start_time)));
-      const last = new Date(Math.max(...closed.map((e) => e.start_time)));
-      const sameMonth = first.getFullYear() === last.getFullYear() && first.getMonth() === last.getMonth();
-      const lastDay = new Date(last.getFullYear(), last.getMonth() + 1, 0).getDate();
-      range = sameMonth && first.getDate() === 1 && last.getDate() === lastDay
-        ? longMonth(`${first.getFullYear()}-${first.getMonth() + 1}`)
-        : formatPeriod(first.getTime(), last.getTime());
+      const earliest = Math.min(...closed.map((e) => e.start_time));
+      const latest = Math.max(...closed.map((e) => e.start_time));
+      const first = wallOf(earliest);
+      const last = wallOf(latest);
+      const sameMonth = first.year === last.year && first.month === last.month;
+      range = sameMonth && first.day === 1 && last.day === daysInMonth(last.year, last.month)
+        ? longMonth(`${first.year}-${first.month}`)
+        : formatPeriod(earliest, latest);
     }
     if (scopeLabel) return range ? `${scopeLabel} \u00b7 ${range}` : scopeLabel;
     return range || "No entries";
@@ -209,8 +211,8 @@ export default function Ledger({ entries, scopeLabel, onEdit, onContinue, onDupl
 
   const rates = buildRateRows(entries);
   const multiYear = closed.length > 0 &&
-    new Date(Math.min(...closed.map((e) => e.start_time))).getFullYear() !==
-      new Date(Math.max(...closed.map((e) => e.start_time))).getFullYear();
+    wallOf(Math.min(...closed.map((e) => e.start_time))).year !==
+      wallOf(Math.max(...closed.map((e) => e.start_time))).year;
 
   const generatedDate = longDate(Date.now());
   const ledgerDateFormat = getDateFormat("ledger");

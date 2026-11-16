@@ -2,17 +2,22 @@ import { useEffect, useMemo, useState } from "react";
 import { currencySymbol } from "../lib/currencies.js";
 import { formatDuration, formatMoney } from "../lib/format.js";
 import { dateTimeHint, formatDateTimeInput, getDateFormat, parseDateTimeInput } from "../lib/dateFormat.js";
+import { getDefaultTimezone, offsetLabel, timezoneOptions } from "../lib/time.js";
 
-function draftFrom(entry, format) {
+// The start and end text are read and written in the entry's zone (its own zone when it has
+// one, otherwise the workspace default). Create mode always uses the default zone.
+function draftFrom(entry, format, creating) {
+  const zone = creating ? getDefaultTimezone() : entry.timezone || getDefaultTimezone();
   return {
     customerId: entry.customer_id,
     projectId: entry.project_id,
     activityId: entry.activity_id,
     description: entry.description || "",
     tags: entry.tags || "",
-    startTime: formatDateTimeInput(entry.start_time, format),
+    timezone: zone,
+    startTime: formatDateTimeInput(entry.start_time, format, zone),
     // A running entry has no end yet; an empty field means "keep recording".
-    endTime: entry.is_running ? "" : formatDateTimeInput(entry.end_time || entry.start_time + 3600000, format),
+    endTime: entry.is_running ? "" : formatDateTimeInput(entry.end_time || entry.start_time + 3600000, format, zone),
     hourlyRate: String(entry.rate_applied ?? 0),
   };
 }
@@ -25,15 +30,30 @@ function draftFrom(entry, format) {
 export default function EntryEditor({ entry, mode = "edit", customers, projects, activities, busy, onClose, onSave }) {
   const creating = mode === "create";
   const format = getDateFormat("edit");
-  const [draft, setDraft] = useState(() => draftFrom(entry, format));
+  const [draft, setDraft] = useState(() => draftFrom(entry, format, creating));
   const customerProjects = useMemo(
     () => projects.filter((project) => project.customer_id === draft.customerId),
     [projects, draft.customerId]
   );
 
   useEffect(() => {
-    setDraft(draftFrom(entry, format));
-  }, [entry, format]);
+    setDraft(draftFrom(entry, format, creating));
+  }, [entry, format, creating]);
+
+  // Changing the zone keeps the instants: the typed start and end are re-read in the old zone
+  // and written back in the new one. Text that does not parse is left as typed.
+  const changeZone = (nextZone) => {
+    setDraft((current) => {
+      const startInstant = parseDateTimeInput(current.startTime, format, current.timezone);
+      const endInstant = parseDateTimeInput(current.endTime, format, current.timezone);
+      return {
+        ...current,
+        timezone: nextZone,
+        startTime: Number.isFinite(startInstant) ? formatDateTimeInput(startInstant, format, nextZone) : current.startTime,
+        endTime: Number.isFinite(endInstant) ? formatDateTimeInput(endInstant, format, nextZone) : current.endTime,
+      };
+    });
+  };
 
   useEffect(() => {
     if (!customerProjects.some((project) => project.id === draft.projectId)) {
@@ -42,8 +62,8 @@ export default function EntryEditor({ entry, mode = "edit", customers, projects,
   }, [customerProjects, draft.projectId]);
 
   const running = !creating && Boolean(entry.is_running);
-  const startMs = parseDateTimeInput(draft.startTime, format);
-  const endMs = parseDateTimeInput(draft.endTime, format);
+  const startMs = parseDateTimeInput(draft.startTime, format, draft.timezone);
+  const endMs = parseDateTimeInput(draft.endTime, format, draft.timezone);
   const keepsRunning = running && draft.endTime === "";
   const previewSeconds = Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs
     ? Math.max(1, Math.round((endMs - startMs) / 1000))
@@ -66,6 +86,7 @@ export default function EntryEditor({ entry, mode = "edit", customers, projects,
         startTime: startMs,
         endTime: endMs,
         hourlyRate: Number(draft.hourlyRate),
+        timezone: draft.timezone,
       });
       return;
     }
@@ -77,6 +98,7 @@ export default function EntryEditor({ entry, mode = "edit", customers, projects,
       tags: draft.tags,
       startTime: startMs,
       hourlyRate: Number(draft.hourlyRate),
+      timezone: draft.timezone,
     };
     // Only apply the edit if nobody changed this entry since it was loaded.
     if (entry.version) patch.ifVersion = entry.version;
@@ -139,6 +161,18 @@ export default function EntryEditor({ entry, mode = "edit", customers, projects,
             <input className="input figure mt-1 w-full" type="number" min="0" step="0.01" value={draft.hourlyRate}
               onChange={(event) => set("hourlyRate", event.target.value)} />
           </label>
+
+          {creating ? null : (
+            <label className="field-label sm:col-span-2">
+              Time zone
+              <select className="select mt-1 w-full" value={draft.timezone} onChange={(event) => changeZone(event.target.value)}>
+                {timezoneOptions(draft.timezone).map((zone) => <option key={zone} value={zone}>{zone}</option>)}
+              </select>
+              <span className="ink-muted mt-1 block text-xs font-normal normal-case">
+                {offsetLabel(draft.timezone, Number.isFinite(startMs) ? startMs : Date.now())}. The start and end below are read in this zone.
+              </span>
+            </label>
+          )}
 
           <label className="field-label">
             Started

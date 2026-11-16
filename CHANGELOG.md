@@ -3,6 +3,12 @@
 All notable changes. Newest first. Rules: `docs/2026-10-09-versioning.md` (SemVer, pre-1.0: `feat` = minor, `fix` = patch; docs/chore/ci do not bump).
 Versions 0.1.0 to 0.15.x were assigned retroactively from commit history on 2026-10-09.
 
+## 0.23.0 - 2026-11-17
+- feat!: one time zone for all day/month logic. A default zone lives in the database (`settings.default_timezone`, seeded `Asia/Dhaka`, changeable in Settings) and every entry records its own zone (`time_entries.timezone`, NULL = default). Day and month grouping, the dashboard's per-day bars, the week strip, summaries, Sheets sync dates and the MCP `query_summary` now all use the default zone instead of a mix of UTC and the browser's zone. Migration `2026-11-17-entry-timezone.sql` must be applied to both live D1s before deploying.
+- feat: API/MCP accept an optional `timezone` on entry create/edit/timer start; MCP times without an offset (`2026-11-16T09:30`) are now accepted and read in that zone (else the entry's own zone for edits, else the default); `list_entries` returns each entry's `timezone` and `start_local`/`end_local`; `list_catalog` returns `defaultTimezone`. `GET /api/bootstrap` adds `settings.defaultTimezone`; new `PATCH /api/settings`
+- feat: web edit form has a Time zone field (default: the entry's saved zone; changing it keeps the exact moment); creating an entry uses the default zone; Settings has a Time zone section
+- note: entry `version` hashes now include the zone, so one stale edit made across the upgrade gets a 409 and reloads
+
 ## 0.22.0 - 2026-11-16
 - feat: manual time entry in the web app - an "Add entry" button on the Timesheet opens the entry editor in create mode (client, project, task, start, end, note, tags, rate) and creates a closed entry
 - feat: MCP covers the whole day-to-day workflow without the dashboard. New tools: `list_catalog` (client/project/activity ids), `list_entries`, `add_time_entry` (start + end or `durationMinutes`), `update_time_entry` (also stops a forgotten running timer via `endTime`), `delete_time_entry`, `create_customer`, `create_project`, `create_activity`. Times are epoch ms or ISO 8601 with a UTC offset (offset-less ISO is rejected). The original four tools are unchanged. Plan: `docs/2026-11-16-manual-entry-and-mcp-tools.md`

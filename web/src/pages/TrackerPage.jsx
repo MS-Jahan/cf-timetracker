@@ -128,6 +128,8 @@ export default function TrackerPage({ tracker }) {
           startTime: entry.start_time,
           endTime: entry.end_time,
           hourlyRate: entry.rate_applied,
+          // Keep the original's zone (undefined = the default zone at creation).
+          timezone: entry.timezone || undefined,
         }),
       "Entry duplicated."
     );

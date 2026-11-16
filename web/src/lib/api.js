@@ -1,3 +1,5 @@
+import { setDefaultTimezone } from "./time.js";
+
 const API_BASE = (import.meta.env.VITE_API_BASE || "http://localhost:8787").replace(/\/$/, "");
 
 /**
@@ -136,7 +138,19 @@ export const createApiToken = ({ name, scope = "mcp", expiresInDays = null }) =>
 export const revokeApiToken = (id) =>
   request(`/api/auth/tokens/${encodeURIComponent(id)}`, { method: "DELETE" });
 
-export const getBootstrap = () => request("/api/bootstrap");
+/**
+ * Every bootstrap load also refreshes the workspace's default time zone, so day, month and
+ * clock readings in every page follow the saved setting (lib/time.js).
+ */
+export const getBootstrap = () =>
+  request("/api/bootstrap").then((data) => {
+    setDefaultTimezone(data?.settings?.defaultTimezone);
+    return data;
+  });
+
+/** Workspace settings, e.g. { defaultTimezone } (PATCH; the server validates the zone name). */
+export const updateSettings = (payload) =>
+  request("/api/settings", { method: "PATCH", body: JSON.stringify(payload) });
 
 /** One-row change check: compare with `dataRev` from bootstrap to see if another device wrote. */
 export const getRev = () => request("/api/rev");

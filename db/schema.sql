@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS time_entries (
     rate_applied REAL DEFAULT 0.0,
     cost REAL DEFAULT 0.0,
     currency TEXT, -- billing currency frozen at record time (NULL falls back to the client's)
+    timezone TEXT, -- IANA zone the entry was recorded in (NULL = settings default_timezone)
     is_running INTEGER DEFAULT 0 CHECK(is_running IN (0, 1)),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (customer_id) REFERENCES customers(id),
@@ -63,6 +64,8 @@ CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+-- Default time zone for every day/month/clock reading (Settings page, PATCH /api/settings).
+INSERT OR IGNORE INTO settings (key, value) VALUES ('default_timezone', 'Asia/Dhaka');
 
 -- Project tasks: which shared activities a project exposes as its task list.
 -- New projects are seeded with is_default links to "General" and "Meeting"
