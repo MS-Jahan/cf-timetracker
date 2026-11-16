@@ -23,6 +23,9 @@ name = "cf-timetracker-api"
 [env.demo.vars]
 ALLOWED_ORIGINS = "*"
 DEMO_MODE = "true"
+# Same as the built-in defaults; declared so deploys do not drop the dashboard values.
+AUTH_IP_LIMIT = "10"
+AUTH_PBKDF2_ITERATIONS = "100000"
 
 [[env.demo.d1_databases]]
 binding = "DB"
