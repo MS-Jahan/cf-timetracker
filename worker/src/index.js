@@ -19,6 +19,7 @@ import {
   getActivityDetail,
   isValidMonth,
   entryBounds,
+  getDefaultTimezone,
   listEntries,
   listProjectTasks,
   monthRange,
@@ -37,7 +38,9 @@ import {
   importCsvBatch,
   updateTimeEntry,
   setArchived,
+  setDefaultTimezone,
 } from "./core.js";
+import { dayKey } from "./tz.js";
 import { handleMcp } from "./mcp.js";
 import { allowedOrigins, corsHeaders, handleCors, jsonResponse, originAllowed, readJson } from "./http.js";
 import { authConfigured, authenticate } from "./auth.js";
@@ -225,7 +228,7 @@ async function route(request, env, auth) {
 
     // 1. Single-trip bootstrap
     if (method === "GET" && pathname === "/api/bootstrap") {
-      const [activeTimer, recentEntries, customers, projects, activities, projectTasks, archivedCustomers, archivedProjects, archivedActivities] = await Promise.all([
+      const [activeTimer, recentEntries, customers, projects, activities, projectTasks, archivedCustomers, archivedProjects, archivedActivities, defaultTimezone] = await Promise.all([
         getActiveTimer(env),
         env.DB.prepare(`
           SELECT te.*, c.name AS customer_name, COALESCE(te.currency, c.currency) AS currency, p.name AS project_name, a.name AS activity_name
@@ -259,9 +262,11 @@ async function route(request, env, auth) {
           ORDER BY p.name ASC
         `).all(),
         env.DB.prepare("SELECT * FROM activities WHERE archived_at IS NOT NULL ORDER BY name ASC").all(),
+        getDefaultTimezone(env),
       ]);
       return jsonResponse(request, env, {
         dataRev: await getDataRev(env),
+        settings: { defaultTimezone },
         activeTimer: activeTimer || null,
         entries: (recentEntries.results || []).map(withVersion),
         customers: customers.results || [],
@@ -312,6 +317,7 @@ async function route(request, env, auth) {
         return jsonResponse(request, env, { error: "Google Apps Script Web App URL is required" }, 400);
       }
       const { gasWebhookUrl, filterMonth } = body;
+      const zone = await getDefaultTimezone(env);
 
       let where = "te.is_running = 0";
       const bind = [];
@@ -319,13 +325,13 @@ async function route(request, env, auth) {
         if (!isValidMonth(filterMonth)) {
           return jsonResponse(request, env, { error: "filterMonth must be YYYY-MM" }, 400);
         }
-        const { startMs, endMs } = monthRange(filterMonth);
+        const { startMs, endMs } = monthRange(filterMonth, zone);
         where += " AND te.start_time >= ? AND te.start_time < ?";
         bind.push(startMs, endMs);
       }
 
-      const entries = await env.DB.prepare(`
-        SELECT te.id, date(te.start_time / 1000, 'unixepoch') AS log_date,
+      const rows = await env.DB.prepare(`
+        SELECT te.id,
                te.start_time, te.end_time, te.duration_seconds,
                c.name AS customer, p.name AS project, a.name AS activity,
                te.description, te.tags, te.cost
@@ -336,6 +342,8 @@ async function route(request, env, auth) {
         WHERE ${where}
         ORDER BY te.start_time DESC
       `).bind(...bind).all();
+      // Log date is the calendar day in the default zone, matching the app and summaries.
+      const entries = (rows.results || []).map((row) => ({ ...row, log_date: dayKey(Number(row.start_time), zone) }));
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 10000);
@@ -347,7 +355,7 @@ async function route(request, env, auth) {
             "Content-Type": "application/json",
             "X-Gas-Secret": env.GAS_SECRET || "",
           },
-          body: JSON.stringify({ entries: entries.results, secret: env.GAS_SECRET || "" }),
+          body: JSON.stringify({ entries, secret: env.GAS_SECRET || "" }),
           signal: controller.signal,
         });
       } catch (e) {
@@ -602,6 +610,15 @@ async function route(request, env, auth) {
       const result = await updateActivity(env, activityMatch.id, body);
       if (result.status !== "ok") return jsonResponse(request, env, { error: result.error }, STATUS_CODES[result.status] || 400);
       return jsonResponse(request, env, { success: true, activity: result.activity });
+    }
+
+    // Settings - the default time zone that governs every day/month/clock reading.
+    if (method === "PATCH" && pathname === "/api/settings") {
+      const body = await readJson(request);
+      if (!body || typeof body !== "object") return jsonResponse(request, env, { error: "Invalid JSON body" }, 400);
+      const result = await setDefaultTimezone(env, body.defaultTimezone);
+      if (result.status !== "ok") return jsonResponse(request, env, { error: result.error }, 400);
+      return jsonResponse(request, env, { success: true, settings: result.settings });
     }
 
     // Demo reset - only when DEMO_MODE env var is the exact string "true"

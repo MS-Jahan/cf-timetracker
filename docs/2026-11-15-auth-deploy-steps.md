@@ -134,3 +134,18 @@ Set `BASE=https://tt-api.sabit.dev` (or the demo Worker URL).
 ## 7. Rollback
 
 `npx wrangler rollback` restores the previous Worker; the four new tables are additive and ignored by old code. **Rolling back re-opens the API**: the old code had no auth. If you must roll back, put the instance behind Cloudflare Access again or set `APP_TOKEN` as a stopgap, and fix forward quickly.
+
+## 8. 0.23.0 upgrade: time zones (migration required)
+
+`db/migrations/2026-11-17-entry-timezone.sql` adds `time_entries.timezone` and seeds `settings.default_timezone = 'Asia/Dhaka'`. **Apply it to both live databases before the 0.23.0 Worker deploys** (deploys do not run migrations; without it every entry route returns 500 `no such column: timezone`). From `worker/`:
+
+```
+# check first (empty result = not applied yet; if "timezone" is listed, skip the ALTER)
+npx wrangler d1 execute DB --remote --command "SELECT group_concat(name) FROM pragma_table_info('time_entries')"
+# personal
+npx wrangler d1 execute DB --remote --file=../db/migrations/2026-11-17-entry-timezone.sql
+# demo
+npx wrangler d1 execute DB --env demo --remote --file=../db/migrations/2026-11-17-entry-timezone.sql
+```
+
+Then, after the deploy: Settings -> Time zone shows `Asia/Dhaka`; change it there if you are elsewhere. Existing entries have no stored zone and follow the default. If the file is rejected for any reason, the two statements can be run one at a time with `--command`.

@@ -1,10 +1,5 @@
 import { formatDuration, formatMoney, toHours } from "../lib/format.js";
-
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-const dayKey = (ms) => new Date(ms).toISOString().slice(0, 10);
-const weekday = (ms) => new Date(ms).toLocaleDateString(undefined, { weekday: "short", timeZone: "UTC" }).slice(0, 2);
-const dayNumber = (ms) => new Date(ms).toISOString().slice(8, 10);
+import { addDays, dayKeyOf, todayWall, weekdayShort, ymdOf } from "../lib/time.js";
 
 /**
  * The week as a ruled tally: one column per day, height proportional to recorded time,
@@ -12,18 +7,19 @@ const dayNumber = (ms) => new Date(ms).toISOString().slice(8, 10);
  * anchored to one baseline. This is the honest answer to "where did the hours go",
  * where another summary number would just be another number.
  *
- * Days are UTC, matching the ledger's dates and the server's own day arithmetic.
+ * Days are calendar days in the workspace's default time zone, the same days the ledger
+ * and the server's summaries use.
  */
 export default function WeekStrip({ entries, activeDay, onPickDay }) {
-  const today = new Date();
+  const today = todayWall();
   const days = Array.from({ length: 7 }, (_, index) => {
-    const ms = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()) - (6 - index) * DAY_MS;
-    return { ms, key: dayKey(ms), isToday: index === 6 };
+    const wall = addDays(today, index - 6);
+    return { key: ymdOf(wall), label: weekdayShort(wall), dayNumber: wall.day, isToday: index === 6 };
   });
 
   const closed = entries.filter((e) => !e.is_running);
   const perDay = days.map((day) => {
-    const mine = closed.filter((e) => dayKey(e.start_time) === day.key);
+    const mine = closed.filter((e) => dayKeyOf(e.start_time) === day.key);
     return {
       seconds: mine.reduce((sum, e) => sum + (e.duration_seconds || 0), 0),
       cost: mine.reduce((sum, e) => sum + Number(e.cost || 0), 0),
@@ -76,8 +72,8 @@ export default function WeekStrip({ entries, activeDay, onPickDay }) {
                       : "border-t border-base-300"
                   }`}
                 >
-                  <span className={day.isToday ? "font-medium" : ""}>{weekday(day.ms)}</span>
-                  <span className="sr-only"> {dayNumber(day.ms)}</span>
+                  <span className={day.isToday ? "font-medium" : ""}>{day.label}</span>
+                  <span className="sr-only"> {day.dayNumber}</span>
                 </span>
               </button>
             );

@@ -1,6 +1,10 @@
 // User-selectable date display: one preference for the ledger column, one for the
 // entry editor. Stored per browser (like the theme); the editor uses a text field
 // because native datetime-local inputs follow the browser locale (US month-first).
+// Dates are read in the workspace's default zone unless a zone is passed (see lib/time.js).
+import { getDefaultTimezone, wallOf } from "./time.js";
+import { parseLocalIso } from "./tz.js";
+
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const pad2 = (n) => String(n).padStart(2, "0");
 
@@ -26,12 +30,12 @@ export function setDateFormat(kind, value) {
   try { localStorage.setItem(KEYS[kind], value); } catch {}
 }
 
-/** Local calendar date in the chosen format, e.g. "30/09/2026". */
-export function formatDate(ms, format) {
-  const d = new Date(ms);
-  const day = d.getDate();
-  const month = d.getMonth();
-  const year = d.getFullYear();
+/** Calendar date in the chosen format and zone, e.g. "30/09/2026". */
+export function formatDate(ms, format, tz = getDefaultTimezone()) {
+  const w = wallOf(ms, tz);
+  const day = w.day;
+  const month = w.month - 1;
+  const year = w.year;
   switch (format) {
     case "dmy": return `${pad2(day)}/${pad2(month + 1)}/${year}`;
     case "mdy": return `${pad2(month + 1)}/${pad2(day)}/${year}`;
@@ -41,17 +45,17 @@ export function formatDate(ms, format) {
 }
 
 /** Date + 24h time for the editor field, e.g. "30/09/2026 14:05". */
-export function formatDateTimeInput(ms, format) {
-  const d = new Date(ms);
-  return `${formatDate(ms, format)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+export function formatDateTimeInput(ms, format, tz = getDefaultTimezone()) {
+  const w = wallOf(ms, tz);
+  return `${formatDate(ms, format, tz)} ${pad2(w.hour)}:${pad2(w.minute)}`;
 }
 
 export function dateTimeHint(format) {
   return `${DATE_FORMATS[format].hint} HH:mm`;
 }
 
-/** Parse editor text back to epoch ms (local time). NaN when it does not match the format. */
-export function parseDateTimeInput(text, format) {
+/** Parse editor text back to epoch ms (wall time in `tz`). NaN when it does not match the format or is impossible. */
+export function parseDateTimeInput(text, format, tz = getDefaultTimezone()) {
   const m = String(text).trim().match(/^(.+?)\s+(\d{1,2}):(\d{2})$/);
   if (!m) return NaN;
   const [, datePart, hh, mm] = m;
@@ -65,8 +69,7 @@ export function parseDateTimeInput(text, format) {
     mo = MONTHS.findIndex((name) => name.toLowerCase() === p[2].toLowerCase()) + 1;
     y = +p[3];
   } else return NaN;
-  const date = new Date(y, mo - 1, d, +hh, +mm);
-  // Reject overflow like 31/02 or 25:00 that Date silently rolls over.
-  if (date.getFullYear() !== y || date.getMonth() !== mo - 1 || date.getDate() !== d || +hh > 23 || +mm > 59) return NaN;
-  return date.getTime();
+  // parseLocalIso rejects overflow like 31/02 or 25:00 that Date would silently roll over.
+  const ms = parseLocalIso(`${y}-${pad2(mo)}-${pad2(d)}T${pad2(+hh)}:${pad2(+mm)}`, tz);
+  return ms === null ? NaN : ms;
 }

@@ -16,9 +16,11 @@ import {
   updateActivity,
   updateCustomer,
   updateProject,
+  updateSettings,
 } from "../lib/api.js";
-import { utcMonth } from "../lib/format.js";
 import { applyTheme, THEME_OPTIONS } from "../lib/theme.js";
+import { browserTimezone, getDefaultTimezone, monthKeyOf, offsetLabel, timezoneOptions } from "../lib/time.js";
+import { isValidTimezone } from "../lib/tz.js";
 import { useTracker } from "../lib/useTracker.js";
 import Icon from "../components/Icon.jsx";
 
@@ -44,6 +46,7 @@ function Section({ title, description, children, className = "" }) {
 
 export default function SettingsPage({ themePreference, onThemeChange, demoMode = false, onResetDemo, demoResetting = false }) {
   const {
+    data,
     status,
     loadError,
     actionError,
@@ -64,7 +67,14 @@ export default function SettingsPage({ themePreference, onThemeChange, demoMode 
   const [gasUrl, setGasUrl] = useState(() => localStorage.getItem(GAS_URL_KEY) || "");
   const [syncPeriod, setSyncPeriod] = useState("all");
 
-  const periods = useMemo(() => [...new Set(entries.map((e) => utcMonth(e.start_time)))].sort().reverse(), [entries]);
+  const savedZone = data?.settings?.defaultTimezone || getDefaultTimezone();
+  const [zoneDraft, setZoneDraft] = useState(savedZone);
+  useEffect(() => setZoneDraft(savedZone), [savedZone]);
+  const zoneChoices = useMemo(() => timezoneOptions(zoneDraft), [zoneDraft]);
+  const browserZone = browserTimezone();
+  const saveZone = (tz) => runAction(() => updateSettings({ defaultTimezone: tz }), `Time zone set to ${tz}.`);
+
+  const periods = useMemo(() => [...new Set(entries.map((e) => monthKeyOf(e.start_time)))].sort().reverse(), [entries]);
 
   useEffect(() => {
     document.title = "Settings · Timetracker";
@@ -129,6 +139,47 @@ export default function SettingsPage({ themePreference, onThemeChange, demoMode 
               </select>
             </div>
           ))}
+        </div>
+      </Section>
+
+      <Section
+        title="Time zone"
+        description="Every day, month and clock time in the app is read in this zone, for all entries, the dashboard, the week strip and the MCP summaries. An entry's own zone only changes how its start and end are typed in the entry editor."
+      >
+        <div className="flex flex-wrap items-end gap-x-5 gap-y-4">
+          <div className="min-w-[18rem] flex-1">
+            <label className="field-label" htmlFor="default-zone">Default time zone</label>
+            <select
+              id="default-zone"
+              className="select mt-1 w-full"
+              value={zoneDraft}
+              disabled={busy || status !== "ready"}
+              onChange={(e) => setZoneDraft(e.target.value)}
+            >
+              {zoneChoices.map((zone) => <option key={zone} value={zone}>{zone}</option>)}
+            </select>
+            <p className="ink-muted mt-2 text-sm">
+              Saved: <span className="figure">{savedZone}</span> ({offsetLabel(savedZone)}).
+            </p>
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={busy || status !== "ready" || zoneDraft === savedZone || !isValidTimezone(zoneDraft)}
+            onClick={() => saveZone(zoneDraft)}
+          >
+            Save time zone
+          </button>
+          {browserZone ? (
+            <button
+              type="button"
+              className="btn btn-ghost ring-1 ring-inset ring-base-300"
+              disabled={busy || status !== "ready" || browserZone === savedZone}
+              onClick={() => saveZone(browserZone)}
+            >
+              Use this browser&apos;s zone ({browserZone})
+            </button>
+          ) : null}
         </div>
       </Section>
 

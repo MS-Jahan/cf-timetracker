@@ -1,3 +1,5 @@
+import { dayKeyOf, wallOf } from "./time.js";
+
 export function formatDuration(totalSeconds) {
   const s = Math.max(0, Math.floor(totalSeconds || 0));
   const h = Math.floor(s / 3600);
@@ -31,24 +33,19 @@ export function formatMoney(value, currency = "USD") {
   return `${currency} ${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 }
 
-/** UTC date string (YYYY-MM-DD) for an epoch-ms timestamp - matches SQLite date(start_time/1000,'unixepoch'). */
-export function utcDate(ms) {
-  return new Date(ms).toISOString().slice(0, 10);
-}
-
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const pad2 = (n) => String(n).padStart(2, "0");
 
-/** Short local date for printed reports: "30 Sep". */
+/** Short date in the default zone for printed reports: "30 Sep". */
 export function shortDate(ms) {
-  const d = new Date(ms);
-  return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  const w = wallOf(ms);
+  return `${w.day} ${MONTHS[w.month - 1]}`;
 }
 
-/** Short local date + 24h time for printed reports: "30 Sep 14:05". */
+/** Short date + 24h time in the default zone for printed reports: "30 Sep 14:05". */
 export function shortDateTime(ms) {
-  const d = new Date(ms);
-  return `${shortDate(ms)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  const w = wallOf(ms);
+  return `${shortDate(ms)} ${pad2(w.hour)}:${pad2(w.minute)}`;
 }
 
 const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -59,43 +56,25 @@ export function longMonth(yyyymm) {
   return MONTHS_LONG[Number(m) - 1] ? `${MONTHS_LONG[Number(m) - 1]} ${y}` : yyyymm;
 }
 
-/** Local long date for printed reports: "9 October 2026". */
+/** Long date in the default zone for printed reports: "9 October 2026". */
 export function longDate(ms) {
-  const d = new Date(ms);
-  return `${d.getDate()} ${MONTHS_LONG[d.getMonth()]} ${d.getFullYear()}`;
+  const w = wallOf(ms);
+  return `${w.day} ${MONTHS_LONG[w.month - 1]} ${w.year}`;
 }
 
 /**
- * Compact local date range for printed reports (en dash):
+ * Compact date range in the default zone for printed reports (en dash):
  * "28 - 30 September 2026", "28 Sep - 4 Oct 2026", "28 Dec 2025 - 3 Jan 2026".
  */
 export function formatPeriod(startMs, endMs) {
-  const a = new Date(Math.min(startMs, endMs));
-  const b = new Date(Math.max(startMs, endMs));
-  const [ad, am, ay, bd, bm, by] = [a.getDate(), a.getMonth(), a.getFullYear(), b.getDate(), b.getMonth(), b.getFullYear()];
+  const a = wallOf(Math.min(startMs, endMs));
+  const b = wallOf(Math.max(startMs, endMs));
+  const [ad, am, ay, bd, bm, by] = [a.day, a.month - 1, a.year, b.day, b.month - 1, b.year];
   if (ay === by && am === bm) {
     return ad === bd ? `${ad} ${MONTHS_LONG[am]} ${ay}` : `${ad} \u2013 ${bd} ${MONTHS_LONG[am]} ${ay}`;
   }
   if (ay === by) return `${ad} ${MONTHS[am]} \u2013 ${bd} ${MONTHS[bm]} ${ay}`;
   return `${ad} ${MONTHS[am]} ${ay} \u2013 ${bd} ${MONTHS[bm]} ${by}`;
-}
-
-/** UTC month key (YYYY-MM) for an epoch-ms timestamp. */
-export function utcMonth(ms) {
-  return new Date(ms).toISOString().slice(0, 7);
-}
-
-/** Local datetime-local input value for an epoch-ms timestamp. */
-export function formatDateTimeLocal(ms) {
-  const date = new Date(ms);
-  const offset = date.getTimezoneOffset() * 60000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
-}
-
-/** Parse a datetime-local value into epoch milliseconds. */
-export function parseDateTimeLocal(value) {
-  const ms = new Date(value).getTime();
-  return Number.isFinite(ms) ? ms : NaN;
 }
 
 export const CSV_COLUMNS = [
@@ -114,7 +93,7 @@ export const CSV_COLUMNS = [
 export function entryToCsvRow(entry) {
   return [
     entry.id,
-    utcDate(entry.start_time),
+    dayKeyOf(entry.start_time),
     entry.customer_name ?? entry.customer ?? "",
     entry.project_name ?? entry.project ?? "",
     entry.activity_name ?? entry.activity ?? "",

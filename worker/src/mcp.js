@@ -15,31 +15,42 @@ import {
   createTimeEntry,
   deleteTimeEntry,
   getActiveTimer,
+  getDefaultTimezone,
   isValidMonth,
   listEntries,
-  monthRange,
   querySummary,
   startTimer,
   stopTimer,
   updateTimeEntry,
 } from "./core.js";
+import { formatOffsetIso, isValidTimezone, parseLocalIso } from "./tz.js";
 
 export const PROTOCOL_VERSION = "2025-06-18";
 
-/** Time arguments accept epoch milliseconds or an ISO 8601 string with an explicit offset. */
+/**
+ * Time arguments: epoch milliseconds, or ISO 8601. With an offset (+06:00, Z) the instant is
+ * fixed; without one the wall clock is read in `timezone`, else in the default zone.
+ */
 const TIME_INPUT = {
   type: ["string", "number"],
-  description: "Epoch milliseconds, or ISO 8601 with a UTC offset (e.g. 2026-11-16T09:30:00+06:00 or ...Z)",
+  description:
+    "Epoch milliseconds, or ISO 8601 (e.g. 2026-11-16T09:30:00+06:00 or ...Z). Without an offset, read in `timezone` (else the default zone).",
 };
+const TIMEZONE_INPUT = { type: "string", description: "IANA zone name, e.g. Asia/Dhaka. Default: the app's default zone." };
+const TIMEZONE_ERROR = "timezone must be an IANA time zone name, e.g. Asia/Dhaka";
 
 /** Bad parameters (not business errors): surfaced as JSON-RPC -32602 by dispatch(). */
 class McpParamError extends Error {}
 
 const ISO_WITH_OFFSET = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,9})?)?(Z|[+-]\d{2}:\d{2})$/i;
-const ISO_NO_OFFSET = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,9})?)?$/i;
+// Offset-less ISO (wall clock), read in the caller's zone. Fractions are not part of this form.
+const ISO_NO_OFFSET = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/i;
 
-/** Epoch ms (number, or digit string of >= 10 chars) or ISO 8601 with offset -> ms; otherwise null. */
-export function parseTimeInput(value) {
+/**
+ * Epoch ms (number, or digit string of >= 10 chars), ISO 8601 with an offset (an instant), or
+ * offset-less ISO read as wall time in `zone` -> ms; otherwise null. Offset-less needs a zone.
+ */
+export function parseTimeInput(value, zone) {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
   if (typeof value !== "string") return null;
   const text = value.trim();
@@ -48,20 +59,29 @@ export function parseTimeInput(value) {
     const ms = Date.parse(text);
     return Number.isFinite(ms) ? ms : null;
   }
+  if (zone && ISO_NO_OFFSET.test(text)) return parseLocalIso(text, zone);
   return null;
 }
 
-function requireTime(field, value) {
-  const ms = parseTimeInput(value);
+function requireTime(field, value, zone) {
+  const ms = parseTimeInput(value, zone);
   if (ms !== null) return ms;
-  if (typeof value === "string" && ISO_NO_OFFSET.test(value.trim())) {
-    throw new McpParamError(`${field} must include a UTC offset, e.g. +06:00 or Z (the Worker cannot know your timezone)`);
-  }
-  throw new McpParamError(`${field} must be epoch milliseconds or an ISO 8601 string with a UTC offset`);
+  throw new McpParamError(`${field} must be epoch milliseconds or an ISO 8601 date-time (with an offset, or read in the time zone)`);
 }
 
 /** Optional time: null and undefined both mean "not given". */
-const optionalTime = (field, value) => (value === undefined || value === null ? undefined : requireTime(field, value));
+const optionalTime = (field, value, zone) => (value === undefined || value === null ? undefined : requireTime(field, value, zone));
+
+/**
+ * Zones for one call: `zone` reads offset-less wall times (the given timezone, else the default),
+ * `defaultZone` is what entries without their own zone display in.
+ */
+async function readZones(env, timezone) {
+  const defaultZone = await getDefaultTimezone(env);
+  if (timezone === undefined || timezone === null || timezone === "") return { zone: defaultZone, defaultZone };
+  if (typeof timezone !== "string" || !isValidTimezone(timezone)) throw new McpParamError(TIMEZONE_ERROR);
+  return { zone: timezone, defaultZone };
+}
 
 /** Drop undefined/null so core functions see only the fields the caller actually sent. */
 function defined(obj) {
@@ -88,6 +108,7 @@ export const TOOLS = [
         description: { type: "string" },
         tags: { type: "string", description: "Opaque string, e.g. comma-separated" },
         hourlyRate: { type: "number", description: "Override the resolved rate" },
+        timezone: TIMEZONE_INPUT,
       },
       required: ["customerId", "projectId", "activityId"],
       additionalProperties: false,
@@ -101,11 +122,11 @@ export const TOOLS = [
   {
     name: "query_summary",
     description:
-      "Aggregate closed entries per customer/project over a range. Provide either `month` (YYYY-MM, UTC) or `fromMs`/`toMs`; omit both for all time.",
+      "Aggregate closed entries per customer/project over a range. Provide either `month` (YYYY-MM, a calendar month in the default time zone) or `fromMs`/`toMs`; omit both for all time.",
     inputSchema: {
       type: "object",
       properties: {
-        month: { type: "string", pattern: "^\\d{4}-\\d{2}$", description: "UTC month slice, e.g. 2025-07" },
+        month: { type: "string", pattern: "^\\d{4}-\\d{2}$", description: "Calendar month in the default time zone, e.g. 2025-07" },
         fromMs: { type: "number", description: "Inclusive start, Unix epoch milliseconds" },
         toMs: { type: "number", description: "Exclusive end, Unix epoch milliseconds" },
       },
@@ -129,12 +150,13 @@ export const TOOLS = [
   {
     name: "list_entries",
     description:
-      "List time entries newest first, including the running entry. fromTime/toTime form a half-open range and must be given together. Use list_entries before update_time_entry or delete_time_entry to find an id.",
+      "List time entries newest first, including the running entry, with each entry's timezone and local start/end. fromTime/toTime form a half-open range and must be given together. Use list_entries before update_time_entry or delete_time_entry to find an id.",
     inputSchema: {
       type: "object",
       properties: {
         fromTime: TIME_INPUT,
         toTime: TIME_INPUT,
+        timezone: TIMEZONE_INPUT,
         customerId: { type: "string" },
         projectId: { type: "string" },
         activityId: { type: "string" },
@@ -160,6 +182,7 @@ export const TOOLS = [
         description: { type: "string" },
         tags: { type: "string", description: "Opaque string, e.g. comma-separated" },
         hourlyRate: { type: "number", description: "Override the resolved rate" },
+        timezone: TIMEZONE_INPUT,
       },
       required: ["customerId", "projectId", "activityId", "startTime"],
       additionalProperties: false,
@@ -182,6 +205,7 @@ export const TOOLS = [
         startTime: TIME_INPUT,
         endTime: TIME_INPUT,
         hourlyRate: { type: "number" },
+        timezone: { ...TIMEZONE_INPUT, description: "IANA zone for this entry; empty or null returns it to the default zone. Instants are unchanged." },
       },
       required: ["id"],
       additionalProperties: false,
@@ -284,7 +308,8 @@ const clampLimit = (value) => {
 
 const isoOrNull = (ms) => (ms === null || ms === undefined ? null : new Date(Number(ms)).toISOString());
 
-function shapeEntry(e) {
+function shapeEntry(e, defaultZone) {
+  const zone = e.timezone || defaultZone;
   return {
     id: e.id,
     version: e.version,
@@ -303,6 +328,9 @@ function shapeEntry(e) {
     duration_seconds: e.duration_seconds ?? 0,
     cost: e.cost ?? 0,
     currency: e.currency ?? null,
+    timezone: zone,
+    start_local: e.start_time == null ? null : formatOffsetIso(Number(e.start_time), zone),
+    end_local: e.end_time == null ? null : formatOffsetIso(Number(e.end_time), zone),
     is_running: Boolean(e.is_running),
   };
 }
@@ -337,6 +365,7 @@ async function listCatalog(env, { includeArchived }) {
 
   const archived = (row) => (includeArchived ? { archived: row.archived_at !== null && row.archived_at !== undefined } : {});
   return {
+    defaultTimezone: await getDefaultTimezone(env),
     customers: customers.map((c) => ({ id: c.id, name: c.name, currency: c.currency, hourly_rate: c.hourly_rate, ...archived(c) })),
     projects: projects.map((p) => ({ id: p.id, customer_id: p.customer_id, name: p.name, rate: p.rate, ...archived(p) })),
     activities: activities.map((a) => ({ id: a.id, name: a.name, emoji: a.emoji, ...archived(a) })),
@@ -348,9 +377,10 @@ async function listEntriesTool(env, args) {
   const hasFrom = args.fromTime !== undefined && args.fromTime !== null;
   const hasTo = args.toTime !== undefined && args.toTime !== null;
   if (hasFrom !== hasTo) throw new McpParamError("fromTime and toTime must be given together");
+  const { zone, defaultZone } = await readZones(env, args.timezone);
   const res = await listEntries(env, {
-    fromMs: hasFrom ? requireTime("fromTime", args.fromTime) : undefined,
-    toMs: hasTo ? requireTime("toTime", args.toTime) : undefined,
+    fromMs: hasFrom ? requireTime("fromTime", args.fromTime, zone) : undefined,
+    toMs: hasTo ? requireTime("toTime", args.toTime, zone) : undefined,
     customerId: args.customerId,
     projectId: args.projectId,
     activityId: args.activityId,
@@ -358,21 +388,22 @@ async function listEntriesTool(env, args) {
   });
   if (res.status !== "ok") return failure(res);
   return {
-    entries: res.entries.map(shapeEntry),
+    entries: res.entries.map((e) => shapeEntry(e, defaultZone)),
     returned: res.paging.returned,
     has_more: res.paging.has_more,
   };
 }
 
 async function addTimeEntry(env, args) {
-  const startTime = requireTime("startTime", args.startTime);
+  const { zone } = await readZones(env, args.timezone);
+  const startTime = requireTime("startTime", args.startTime, zone);
   const hasEnd = args.endTime !== undefined && args.endTime !== null;
   const hasDuration = args.durationMinutes !== undefined && args.durationMinutes !== null;
   if (hasEnd === hasDuration) throw new McpParamError("provide exactly one of endTime or durationMinutes");
 
   let endTime;
   if (hasEnd) {
-    endTime = requireTime("endTime", args.endTime);
+    endTime = requireTime("endTime", args.endTime, zone);
   } else {
     const minutes = Number(args.durationMinutes);
     if (!Number.isFinite(minutes) || minutes <= 0) throw new McpParamError("durationMinutes must be a number greater than 0");
@@ -390,6 +421,7 @@ async function addTimeEntry(env, args) {
       description: args.description,
       tags: args.tags,
       hourlyRate: args.hourlyRate,
+      timezone: args.timezone,
     })
   );
   if (res.status !== "ok") return failure(res);
@@ -398,6 +430,12 @@ async function addTimeEntry(env, args) {
 }
 
 async function updateTimeEntryTool(env, args) {
+  let { zone } = await readZones(env, args.timezone);
+  if (args.timezone === undefined || args.timezone === null || args.timezone === "") {
+    // No zone given: offset-less times are read in the zone this entry was recorded in.
+    const stored = await env.DB.prepare("SELECT timezone FROM time_entries WHERE id = ?").bind(args.id).first("timezone");
+    if (stored) zone = stored;
+  }
   const patch = defined({
     customerId: args.customerId,
     projectId: args.projectId,
@@ -405,10 +443,12 @@ async function updateTimeEntryTool(env, args) {
     description: args.description,
     tags: args.tags,
     hourlyRate: args.hourlyRate,
-    startTime: optionalTime("startTime", args.startTime),
-    endTime: optionalTime("endTime", args.endTime),
+    startTime: optionalTime("startTime", args.startTime, zone),
+    endTime: optionalTime("endTime", args.endTime, zone),
     ifVersion: args.ifVersion,
   });
+  // Null or "" returns the entry to the default zone, so it must not be dropped by defined().
+  if (args.timezone !== undefined) patch.timezone = args.timezone;
   const res = await updateTimeEntry(env, args.id, patch);
   if (res.status !== "ok") return failure(res);
   await bumpDataRev(env);
@@ -429,6 +469,7 @@ async function callTool(env, name, args = {}) {
       return timer ? { timer } : { status: "idle" };
     }
     case "start_timer": {
+      await readZones(env, args.timezone); // bad zone is a parameter error (-32602)
       const res = await startTimer(env, args);
       if (res.status === "ok") {
         await bumpDataRev(env);

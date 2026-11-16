@@ -26,17 +26,21 @@ export default function PrintPage() {
     document.title = "Print timesheet · Timetracker";
     let cancelled = false;
     // Only the requested month/client/project is fetched (not the whole history), as lean
-    // rows whose names come from the masters in bootstrap.
-    const range = monthRange(month);
-    Promise.all([
-      bootstrap(),
-      fetchEntries({
-        ...(range || {}),
-        customerId: clientId === "all" ? undefined : clientId,
-        projectId: projectId === "all" ? undefined : projectId,
-        lean: true,
-      }),
-    ])
+    // rows whose names come from the masters in bootstrap. The month is resolved in the
+    // workspace's default zone, which the bootstrap call sets, so it runs after it.
+    bootstrap()
+      .then((data) => {
+        const range = monthRange(month);
+        return Promise.all([
+          data,
+          fetchEntries({
+            ...(range || {}),
+            customerId: clientId === "all" ? undefined : clientId,
+            projectId: projectId === "all" ? undefined : projectId,
+            lean: true,
+          }),
+        ]);
+      })
       .then(([data, rows]) => {
         if (cancelled) return;
         setMeta({ customers: data.customers || [], projects: data.projects || [] });

@@ -1,5 +1,7 @@
 // Rows for the printed "Hourly rates" table, derived from each closed entry's
 // stored rate_applied. Rules: docs/2026-10-09-print-hourly-rates.md
+import { wallOf } from "./time.js";
+
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const cents = (rate) => Math.round(Number(rate || 0) * 100);
 
@@ -59,15 +61,15 @@ export function buildRateRows(entries) {
   };
 }
 
-/** Short local range: "5 Sep", "1 – 14 Sep", "28 Sep – 4 Oct"; adds years when withYear. */
+/** Short range in the default zone: "5 Sep", "1 – 14 Sep", "28 Sep – 4 Oct"; adds years when withYear. */
 export function shortRange(fromMs, toMs, withYear) {
-  const a = new Date(fromMs);
-  const b = new Date(toMs);
-  const day = (d, year) => `${d.getDate()} ${MONTHS[d.getMonth()]}${year ? ` ${d.getFullYear()}` : ""}`;
-  const sameDay = a.toDateString() === b.toDateString();
-  if (sameDay) return day(a, withYear);
-  if (a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth()) {
-    return `${a.getDate()} – ${day(b, withYear)}`;
+  const a = wallOf(fromMs);
+  const b = wallOf(toMs);
+  const day = (d) => `${d.day} ${MONTHS[d.month - 1]}${withYear ? ` ${d.year}` : ""}`;
+  const sameDay = a.year === b.year && a.month === b.month && a.day === b.day;
+  if (sameDay) return day(a);
+  if (a.year === b.year && a.month === b.month) {
+    return `${a.day} – ${day(b)}`;
   }
-  return `${day(a, withYear)} – ${day(b, withYear)}`;
+  return `${day(a)} – ${day(b)}`;
 }
