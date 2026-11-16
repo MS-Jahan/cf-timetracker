@@ -42,6 +42,8 @@ export default function TrackerPage({ tracker }) {
   const [clientFilter, setClientFilter] = useState("all");
   const [projectFilter, setProjectFilter] = useState("all");
   const [editingEntry, setEditingEntry] = useState(null);
+  // Blank closed-entry draft for "Add entry" (held in state so EntryEditor's reset effect stays stable).
+  const [creatingEntry, setCreatingEntry] = useState(null);
   const [deletingEntry, setDeletingEntry] = useState(null);
   // The ledger loads only the selected period (and client/project) from the server,
   // as lean rows whose names are resolved here from the masters we already hold.
@@ -144,6 +146,46 @@ export default function TrackerPage({ tracker }) {
         ? "This entry was changed on another device. The latest version is loaded - review it and save again."
         : "This entry was changed on another device, so nothing was deleted. The list is up to date; try again if you still want to."
     );
+  };
+
+  /**
+   * Blank draft for a manual entry: the latest entry's client/project/task when still active,
+   * otherwise the first client that has a project. Last hour, rate = project ?? client ?? 0.
+   */
+  const openNewEntry = () => {
+    const latest = entries[0];
+    const latestProject = latest && projects.find((p) => p.id === latest.project_id);
+    const useLatest = Boolean(
+      latest
+        && latestProject
+        && latestProject.customer_id === latest.customer_id
+        && customers.some((c) => c.id === latest.customer_id)
+        && activities.some((a) => a.id === latest.activity_id)
+    );
+    const customer = useLatest
+      ? customers.find((c) => c.id === latest.customer_id)
+      : customers.find((c) => projects.some((p) => p.customer_id === c.id)) || customers[0];
+    const project = useLatest ? latestProject : projects.find((p) => p.customer_id === customer?.id);
+    const activity = useLatest ? activities.find((a) => a.id === latest.activity_id) : activities[0];
+    const now = Math.floor(Date.now() / 60000) * 60000;
+    setCreatingEntry({
+      id: null,
+      version: null,
+      is_running: 0,
+      customer_id: customer?.id || "",
+      project_id: project?.id || "",
+      activity_id: activity?.id || "",
+      description: "",
+      tags: "",
+      start_time: now - 3600000,
+      end_time: now,
+      rate_applied: project?.rate ?? customer?.hourly_rate ?? 0,
+    });
+  };
+
+  const saveNewEntry = async (payload) => {
+    const result = await runAction(() => createTimeEntry(payload), "Entry added.");
+    if (result.ok) setCreatingEntry(null);
   };
 
   const saveEntry = async (patch) => {
@@ -256,6 +298,16 @@ export default function TrackerPage({ tracker }) {
             <p className="ink-muted text-sm">{ledgerSummary}</p>
           </div>
 
+          <button
+            type="button"
+            className="btn btn-sm no-print"
+            disabled={busy || customers.length === 0 || activities.length === 0}
+            onClick={openNewEntry}
+          >
+            <Icon name="plus" size={15} />
+            Add entry
+          </button>
+
           <div className="flex flex-wrap items-end gap-x-5 gap-y-3" aria-label="Ledger filters and exports">
             <div>
               <label className="field-label" htmlFor="f-period">
@@ -363,6 +415,19 @@ export default function TrackerPage({ tracker }) {
           busy={busy}
           onClose={() => setEditingEntry(null)}
           onSave={saveEntry}
+        />
+      ) : null}
+
+      {creatingEntry ? (
+        <EntryEditor
+          mode="create"
+          entry={creatingEntry}
+          customers={customers}
+          projects={projects}
+          activities={activities}
+          busy={busy}
+          onClose={() => setCreatingEntry(null)}
+          onSave={saveNewEntry}
         />
       ) : null}
 

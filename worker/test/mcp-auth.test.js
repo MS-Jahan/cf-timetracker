@@ -8,7 +8,20 @@ import { TOOLS } from "../src/mcp.js";
 import { TEST_ORIGIN, createTestEnv, insertApiToken, req } from "./helpers/d1-sqlite.js";
 
 const PASSWORD = "correct-horse-battery";
-const TOOL_NAMES = ["get_active_timer", "start_timer", "stop_timer", "query_summary"];
+const TOOL_NAMES = [
+  "get_active_timer",
+  "start_timer",
+  "stop_timer",
+  "query_summary",
+  "list_catalog",
+  "list_entries",
+  "add_time_entry",
+  "update_time_entry",
+  "delete_time_entry",
+  "create_customer",
+  "create_project",
+  "create_activity",
+];
 
 /** Fresh env with the owner set up; returns the session token and user id. */
 async function setupOwner(extra = {}) {
@@ -47,7 +60,7 @@ describe("MCP auth - credentials", () => {
     assert.equal(res.status, 401);
   });
 
-  it("an mcp-scope API token: initialize and tools/list succeed; tools are exactly the four with the same schemas", async () => {
+  it("an mcp-scope API token: initialize and tools/list succeed; tools are exactly the twelve with the same schemas", async () => {
     const { env, userId } = await setupOwner();
     const token = await insertApiToken(env, userId, { scope: "mcp" });
 
@@ -70,7 +83,7 @@ describe("MCP auth - credentials", () => {
     const { env, token } = await setupOwner();
     const res = await rpc(env, LIST, { token });
     assert.equal(res.status, 200);
-    assert.equal((await res.json()).result.tools.length, 4);
+    assert.equal((await res.json()).result.tools.length, TOOL_NAMES.length);
   });
 
   it("revoked and expired API tokens are 401", async () => {

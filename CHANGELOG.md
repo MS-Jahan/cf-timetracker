@@ -3,6 +3,10 @@
 All notable changes. Newest first. Rules: `docs/2026-10-09-versioning.md` (SemVer, pre-1.0: `feat` = minor, `fix` = patch; docs/chore/ci do not bump).
 Versions 0.1.0 to 0.15.x were assigned retroactively from commit history on 2026-10-09.
 
+## 0.22.0 - 2026-11-16
+- feat: manual time entry in the web app - an "Add entry" button on the Timesheet opens the entry editor in create mode (client, project, task, start, end, note, tags, rate) and creates a closed entry
+- feat: MCP covers the whole day-to-day workflow without the dashboard. New tools: `list_catalog` (client/project/activity ids), `list_entries`, `add_time_entry` (start + end or `durationMinutes`), `update_time_entry` (also stops a forgotten running timer via `endTime`), `delete_time_entry`, `create_customer`, `create_project`, `create_activity`. Times are epoch ms or ISO 8601 with a UTC offset (offset-less ISO is rejected). The original four tools are unchanged. Plan: `docs/2026-11-16-manual-entry-and-mcp-tools.md`
+
 ## 0.21.0 - 2026-11-12
 - feat!: BREAKING: username + password authentication replaces Cloudflare Zero Trust reliance. Every `/api/*` route except `/api/auth/status|login|setup|logout` and `/api/demo/status` - and `POST /mcp` - now requires a session (HttpOnly `tt_session` cookie for the web, `Authorization: Bearer` for native/scripts) or a personal API token. `APP_TOKEN`/`X-App-Token` and the `Cf-Access-Authenticated-User-Email` bypass are removed. Passwords: HMAC(`AUTH_PEPPER`) + PBKDF2-SHA256 with per-user salt. New tables via migration `2026-11-12-auth.sql` (apply to both live D1s before deploying). New secrets `AUTH_PEPPER` (required) and `SETUP_TOKEN` (first account).
 - feat: personal API tokens (scope `mcp` or `full`) for MCP clients such as Claude Code (`claude mcp add --transport http ... --header "Authorization: Bearer ttp_..."`); `GET /mcp` answers 405
