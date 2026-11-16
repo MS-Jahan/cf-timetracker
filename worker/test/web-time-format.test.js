@@ -54,3 +54,22 @@ test("clockPlaceholder matches the notation", () => {
   assert.equal(clockPlaceholder("24h"), "HH:mm");
   assert.equal(clockPlaceholder("12h"), "h:mm AM/PM");
 });
+
+const { formatPeriod, longDate, shortDate, shortDateTime } = await import("../../web/src/lib/format.js");
+const { shortRange } = await import("../../web/src/lib/rates.js");
+const at = (iso) => Date.parse(iso);
+
+// Display date format defaults to ymd and the default zone to UTC when run in Node.
+test("date-only displays use the display date format", () => {
+  assert.equal(shortDate(at("2026-09-30T10:00:00Z")), "2026-09-30");
+  assert.equal(longDate(at("2026-10-09T10:00:00Z")), "2026-10-09");
+  assert.equal(shortDateTime(at("2026-09-30T14:05:00Z")), "2026-09-30 14:05");
+});
+
+test("date ranges show both ends and collapse a single day", () => {
+  assert.equal(formatPeriod(at("2026-09-28T01:00:00Z"), at("2026-09-30T01:00:00Z")), "2026-09-28 \u2013 2026-09-30");
+  assert.equal(formatPeriod(at("2026-09-30T20:00:00Z"), at("2026-09-28T01:00:00Z")), "2026-09-28 \u2013 2026-09-30");
+  assert.equal(formatPeriod(at("2026-09-30T01:00:00Z"), at("2026-09-30T20:00:00Z")), "2026-09-30");
+  assert.equal(shortRange(at("2025-12-28T01:00:00Z"), at("2026-01-03T01:00:00Z")), "2025-12-28 \u2013 2026-01-03");
+  assert.equal(shortRange(at("2026-09-05T01:00:00Z"), at("2026-09-05T20:00:00Z")), "2026-09-05");
+});

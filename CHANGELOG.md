@@ -3,6 +3,9 @@
 All notable changes. Newest first. Rules: `docs/2026-10-09-versioning.md` (SemVer, pre-1.0: `feat` = minor, `fix` = patch; docs/chore/ci do not bump).
 Versions 0.1.0 to 0.15.x were assigned retroactively from commit history on 2026-10-09.
 
+## 0.25.1 - 2026-11-17
+- fix: every date-only display now follows the saved display date format instead of the browser locale or a fixed English style: API tokens created/expires, the printed timesheet's Date column, "generated on", the period header and the rates table's dates-worked range (`2026-09-28 – 2026-09-30` in the default `Year-Month-Day` format). Month headings ("November 2026") and weekday labels are unchanged
+
 ## 0.25.0 - 2026-11-17
 - feat: a "Time format" setting (24-hour or 12-hour, Settings, per browser, default 24-hour) that applies to every time of day on screen: the ledger Time column and its tooltip, the printed timesheet Start/Stop cells, the entry editor and the API tokens "last used" time
 - feat: the entry editor (Add entry and Edit) has real pickers: clicking the date opens a calendar (date text stays in the chosen date format), clicking the time opens a custom picker (hour/minute, plus AM/PM in 12-hour mode) that follows the setting instead of the operating system's. Typing still works, and times are parsed in either notation
