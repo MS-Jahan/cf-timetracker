@@ -31,7 +31,7 @@ Use a **different** `AUTH_PEPPER` and `SETUP_TOKEN` for personal and demo.
 | Name | Required | Default / current value | Notes |
 |---|---|---|---|
 | `ALLOWED_ORIGINS` | Yes | personal: `https://timetracker.sabit.dev,https://timetracker-8ss.pages.dev`; demo: `*` | Cookie sign-in is credentialed only for origins listed here. `*` never carries credentials, so the demo uses the Bearer transport. A cookie write from an unlisted origin gets `403 origin_not_allowed`. |
-| `DEMO_MODE` | Yes | `false` / `true` | Enables `/api/demo/reset`. |
+| `DEMO_MODE` | Yes | `false` / `true` | `"true"` turns the Worker into the open demo (no auth, daily reset, `/api/demo/reset`). Personal must stay `"false"`. |
 | `AUTH_PBKDF2_ITERATIONS` | No | `100000` | Lower it (e.g. `20000`) only if logins fail with Workers CPU limit errors on the Free plan. |
 | `SESSION_TTL_HOURS` | No | `720` (30 days), range 1-2160 | |
 | `SESSION_COOKIE_SAMESITE` | No | `Lax` | Leave alone unless UI and API are on different sites and you insist on cookies (prefer Bearer instead). |
@@ -76,17 +76,15 @@ Use a **different** `AUTH_PEPPER` and `SETUP_TOKEN` for personal and demo.
    ```
 7. **Clean up.** `npx wrangler secret delete SETUP_TOKEN` (setup is permanently closed once a user exists, but there is no reason to keep it). If it exists: `npx wrangler secret delete APP_TOKEN`.
 
-## 3. Demo instance (`cf-timetracker` D1, `--env demo`)
+## 3. Demo instance (`cf-timetracker` D1, `--env demo`) - open, no accounts
 
-Do this **before merging PR #1**: every push to `main` auto-deploys the demo Worker, and code that expects the new tables or the pepper would return 500/503 until they exist.
+The demo is public by design: no login, no API tokens, no MCP, no Google Sheets sync. Visitors can add, edit and delete; voice shows "not configured" because no Gemini key is set. A daily cron (03:00 UTC, `[env.demo.triggers]` in `wrangler.toml`) wipes all clients, projects, activities and entries and re-seeds the sample set. The Reset demo button does the same on demand.
 
-1. Check/migrate (you said it ran; confirm):
-   `npx wrangler d1 execute DB --env demo --remote --command "SELECT group_concat(name) FROM sqlite_master WHERE type='table' AND name IN ('users','sessions','api_tokens','auth_throttle')"`
-   else `npx wrangler d1 execute DB --env demo --remote --file=../db/migrations/2026-11-12-auth.sql`.
-2. Secrets: `npx wrangler secret put AUTH_PEPPER --env demo` and `npx wrangler secret put SETUP_TOKEN --env demo`.
-3. Merge PR #1. CI (`deploy.yml`) deploys the demo Worker and Pages (built with `VITE_AUTH_TRANSPORT=bearer`).
-4. Create the demo account through the setup form on `https://cf-timetracker.pages.dev`, then `npx wrangler secret delete SETUP_TOKEN --env demo`.
-5. **Product note:** the demo now requires a login. Decide whether to publish the credentials or add a guest mode later.
+1. Migration: not required for the demo to work in this mode (the auth tables stay unused), but applying `2026-11-12-auth.sql` is harmless and keeps both databases identical.
+2. Secrets: **none needed.** `AUTH_PEPPER` / `SETUP_TOKEN` are ignored on the demo (you may leave or delete them). Do not set `GEMINI_API_KEY` or `GAS_SECRET`.
+3. Merge PR #1. CI (`deploy.yml`) deploys the Worker (registering the cron) and Pages.
+4. Check: `curl -s https://cf-timetracker-api.ssarwarjahan.workers.dev/api/auth/status` -> `{"configured":true,"setupRequired":false,"demo":true}`, then `curl -s .../api/bootstrap` -> 200 without any header.
+5. **Safety:** `DEMO_MODE="true"` makes the whole API public. It must never be set on the personal Worker (top-level `[vars]` has `"false"`); only the exact string `"true"` enables it.
 
 ## 4. Clients and automation
 

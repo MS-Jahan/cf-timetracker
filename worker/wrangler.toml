@@ -27,6 +27,10 @@ DEMO_MODE = "true"
 AUTH_IP_LIMIT = "10"
 AUTH_PBKDF2_ITERATIONS = "100000"
 
+# Demo is open (no accounts) and wipes + re-seeds its data daily at 03:00 UTC.
+[env.demo.triggers]
+crons = ["0 3 * * *"]
+
 [[env.demo.d1_databases]]
 binding = "DB"
 database_name = "cf-timetracker"

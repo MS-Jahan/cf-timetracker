@@ -74,7 +74,22 @@ const NON_MUTATING_POSTS = new Set(["/api/voice/parse", "/api/sync/google-sheets
 /** GETs that must always hit the Worker (they are the freshness probe itself or static). */
 const UNCACHED_GETS = new Set(["/api/rev", "/api/demo/status"]);
 
+/** True only for the exact string "true" (toml vars are strings; Boolean("false") would be truthy). */
+const isDemoMode = (env) => env.DEMO_MODE === "true";
+
+/** Stand-in credential for the open demo; carries no user and is never produced outside DEMO_MODE. */
+const DEMO_AUTH = Object.freeze({ via: "demo", scope: "full", user: null });
+
 export default {
+  /** Cron (wrangler [triggers]): reset the demo dataset. A no-op unless DEMO_MODE is "true". */
+  async scheduled(_event, env, ctx) {
+    if (!isDemoMode(env)) return;
+    ctx.waitUntil((async () => {
+      await resetDemoData(env);
+      await bumpDataRev(env);
+    })());
+  },
+
   async fetch(request, env) {
     const { pathname } = new URL(request.url);
     const method = request.method;
@@ -92,31 +107,49 @@ export default {
         return jsonResponse(request, env, { error: "Route not found" }, 404);
       }
 
+      // 3b. Demo deployment (DEMO_MODE is the exact string "true"): open, account-less sample
+      // instance. No login, no API tokens, no MCP, no Sheets forwarding. Everything else (add,
+      // edit, delete, timers) works as for a signed-in user; a cron resets the data.
+      const demo = isDemoMode(env);
+      if (demo) {
+        if (pathname === "/mcp") return jsonResponse(request, env, { error: "MCP is not available in the demo", code: "demo_mode" }, 404);
+        if (method === "GET" && pathname === "/api/auth/status") {
+          return jsonResponse(request, env, { configured: true, setupRequired: false, demo: true }, 200, { "Cache-Control": "no-store" });
+        }
+        if (pathname.startsWith("/api/auth/")) return jsonResponse(request, env, { error: "Accounts are disabled in the demo", code: "demo_mode" }, 404);
+        if (pathname === "/api/sync/google-sheets") return jsonResponse(request, env, { error: "Google Sheets sync is disabled in the demo", code: "demo_mode" }, 403);
+      }
+
       // 4. Public routes: no ETag, no data_rev bump.
       if (PUBLIC_ROUTES.has(`${method} ${pathname}`)) {
         if (pathname.startsWith("/api/auth/")) return handleAuthRoute(request, env, null);
         return route(request, env, null);
       }
 
-      // 5. Auth must be configured (pepper set); otherwise nothing can be authorized safely.
-      if (!authConfigured(env)) {
-        return jsonResponse(request, env, { error: "Authentication is not configured on the server", code: "auth_not_configured" }, 503);
-      }
+      let auth;
+      if (demo) {
+        auth = DEMO_AUTH; // steps 5-8 do not apply: there are no credentials to check
+      } else {
+        // 5. Auth must be configured (pepper set); otherwise nothing can be authorized safely.
+        if (!authConfigured(env)) {
+          return jsonResponse(request, env, { error: "Authentication is not configured on the server", code: "auth_not_configured" }, 503);
+        }
 
-      // 6. Resolve the credential. /mcp never accepts a cookie (no CSRF surface for agents).
-      const auth = await authenticate(request, env, { allowCookie: pathname !== "/mcp" });
-      if (!auth) {
-        return jsonResponse(request, env, { error: "Authentication required", code: "unauthenticated" }, 401, AUTH_HEADER);
-      }
+        // 6. Resolve the credential. /mcp never accepts a cookie (no CSRF surface for agents).
+        auth = await authenticate(request, env, { allowCookie: pathname !== "/mcp" });
+        if (!auth) {
+          return jsonResponse(request, env, { error: "Authentication required", code: "unauthenticated" }, 401, AUTH_HEADER);
+        }
 
-      // 7. REST needs a full-scope credential; mcp-scope API tokens are MCP-only.
-      if (pathname.startsWith("/api/") && auth.scope !== "full") {
-        return jsonResponse(request, env, { error: "This token cannot access the REST API", code: "insufficient_scope" }, 403);
-      }
+        // 7. REST needs a full-scope credential; mcp-scope API tokens are MCP-only.
+        if (pathname.startsWith("/api/") && auth.scope !== "full") {
+          return jsonResponse(request, env, { error: "This token cannot access the REST API", code: "insufficient_scope" }, 403);
+        }
 
-      // 8. CSRF: a cookie session may only make state-changing calls from an allowed origin.
-      if (auth.via === "cookie" && !SAFE_METHODS.has(method) && !originAllowed(request, env)) {
-        return jsonResponse(request, env, { error: "Origin not allowed", code: "origin_not_allowed" }, 403);
+        // 8. CSRF: a cookie session may only make state-changing calls from an allowed origin.
+        if (auth.via === "cookie" && !SAFE_METHODS.has(method) && !originAllowed(request, env)) {
+          return jsonResponse(request, env, { error: "Origin not allowed", code: "origin_not_allowed" }, 403);
+        }
       }
 
       // 9. MCP: a browser Origin (if sent) must be listed, unless the list contains "*".

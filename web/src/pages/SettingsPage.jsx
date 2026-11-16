@@ -227,22 +227,26 @@ export default function SettingsPage({ themePreference, onThemeChange, demoMode 
               <Icon name="restore" size={16} />
               {demoResetting ? "Resetting…" : "Reset demo data"}
             </button>
-            <p className="ink-muted text-sm">Restores 2 clients, 3 projects, 4 activities, and 5 sample entries.</p>
+            <p className="ink-muted text-sm">Restores 2 clients, 3 projects, 4 activities, and 5 sample entries. The demo also resets itself every day.</p>
           </div>
         </Section>
       ) : null}
 
-      <Section title="Account" className="no-print">
-        <AccountPanel />
-      </Section>
+      {demoMode ? null : (
+        <>
+          <Section title="Account" className="no-print">
+            <AccountPanel />
+          </Section>
 
-      <Section
-        title="API tokens & MCP"
-        description="Personal tokens for MCP clients and scripts. A token is shown once."
-        className="no-print"
-      >
-        <ApiTokensPanel />
-      </Section>
+          <Section
+            title="API tokens & MCP"
+            description="Personal tokens for MCP clients and scripts. A token is shown once."
+            className="no-print"
+          >
+            <ApiTokensPanel />
+          </Section>
+        </>
+      )}
 
       <Section title="Connection">
         <dl className="grid gap-x-10 gap-y-5 sm:grid-cols-2">

@@ -8,7 +8,7 @@ import {
   UNAUTHORIZED_EVENT,
 } from "./api.js";
 
-const INITIAL = { status: "loading", user: null, setupRequired: false, configured: true, error: null };
+const INITIAL = { status: "loading", user: null, demo: false, setupRequired: false, configured: true, error: null };
 
 /** Reads /api/auth/status without touching the signed-in state; never throws. */
 async function readStatus() {
@@ -39,6 +39,12 @@ export function useAuth() {
       const { user } = await getMe();
       setState({ ...INITIAL, status: "authenticated", user, configured: true });
     } catch (err) {
+      // Open demo deployment: the server has no accounts and answers /api/auth/me with
+      // code "demo_mode". Treat the visitor as signed in; there is nothing to sign in to.
+      if (err.code === "demo_mode") {
+        setState({ ...INITIAL, status: "authenticated", demo: true, user: null });
+        return;
+      }
       const status = await readStatus();
       if (status && !status.configured) {
         setState({ ...INITIAL, status: "anonymous", ...status });

@@ -1032,7 +1032,16 @@ export async function entryBounds(env) {
  * The API key stays in the Worker environment; audio/transcript are not persisted.
  */
 export async function resetDemoData(env) {
-  await env.DB.prepare("DELETE FROM time_entries").run();
+  // Full wipe, children before parents, in one atomic batch: visitors may have added, edited
+  // or archived clients/projects/activities, and the scheduled reset must restore the sample
+  // set exactly. Auth tables and settings (data_rev) are left alone.
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM time_entries"),
+    env.DB.prepare("DELETE FROM project_tasks"),
+    env.DB.prepare("DELETE FROM projects"),
+    env.DB.prepare("DELETE FROM activities"),
+    env.DB.prepare("DELETE FROM customers"),
+  ]);
   // Re-seed with the standard demo data
   const customers = [
     { id: "c1111111-1111-4111-8111-111111111111", name: "Acme Corp", currency: "USD", hourly_rate: 120.0 },

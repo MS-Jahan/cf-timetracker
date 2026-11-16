@@ -192,14 +192,16 @@ function AuthedApp({ user, onSignOut }) {
           <ThemeToggle preference={themePreference} onChange={setThemePreference} effective={effective} />
         </div>
 
-        <div className="no-print mt-5 border-t border-base-300 pt-4">
-          <p className="ink-muted truncate text-sm">
-            Signed in as <span className="font-medium text-base-content">{user?.username}</span>
-          </p>
-          <button type="button" className="btn btn-ghost btn-sm mt-2 w-full justify-start" onClick={onSignOut}>
-            Sign out
-          </button>
-        </div>
+        {user ? (
+          <div className="no-print mt-5 border-t border-base-300 pt-4">
+            <p className="ink-muted truncate text-sm">
+              Signed in as <span className="font-medium text-base-content">{user.username}</span>
+            </p>
+            <button type="button" className="btn btn-ghost btn-sm mt-2 w-full justify-start" onClick={onSignOut}>
+              Sign out
+            </button>
+          </div>
+        ) : null}
       </aside>
 
       <section id="main-content" className="min-w-0 flex-1 px-5 pb-16 pt-5 sm:px-8 sm:pt-7" tabIndex="-1">
