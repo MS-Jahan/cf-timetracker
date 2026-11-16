@@ -17,7 +17,13 @@ function draftFrom(entry, format) {
   };
 }
 
-export default function EntryEditor({ entry, customers, projects, activities, busy, onClose, onSave }) {
+/**
+ * mode "edit" (default) changes an existing entry. mode "create" fills in a blank closed entry:
+ * `entry` is then a draft row (customer_id, project_id, activity_id, start_time, end_time,
+ * rate_applied) and onSave receives a createTimeEntry payload instead of a patch.
+ */
+export default function EntryEditor({ entry, mode = "edit", customers, projects, activities, busy, onClose, onSave }) {
+  const creating = mode === "create";
   const format = getDateFormat("edit");
   const [draft, setDraft] = useState(() => draftFrom(entry, format));
   const customerProjects = useMemo(
@@ -35,7 +41,7 @@ export default function EntryEditor({ entry, customers, projects, activities, bu
     }
   }, [customerProjects, draft.projectId]);
 
-  const running = Boolean(entry.is_running);
+  const running = !creating && Boolean(entry.is_running);
   const startMs = parseDateTimeInput(draft.startTime, format);
   const endMs = parseDateTimeInput(draft.endTime, format);
   const keepsRunning = running && draft.endTime === "";
@@ -50,6 +56,19 @@ export default function EntryEditor({ entry, customers, projects, activities, bu
   const set = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
 
   const save = () => {
+    if (creating) {
+      onSave({
+        customerId: draft.customerId,
+        projectId: draft.projectId,
+        activityId: draft.activityId,
+        description: draft.description,
+        tags: draft.tags,
+        startTime: startMs,
+        endTime: endMs,
+        hourlyRate: Number(draft.hourlyRate),
+      });
+      return;
+    }
     const patch = {
       customerId: draft.customerId,
       projectId: draft.projectId,
@@ -76,14 +95,16 @@ export default function EntryEditor({ entry, customers, projects, activities, bu
       >
         <header className="flex items-start justify-between gap-6 border-b border-base-300 pb-4">
           <div>
-            <p className="field-label">{running ? "Edit running entry" : "Edit closed entry"}</p>
+            <p className="field-label">{creating ? "New closed entry" : running ? "Edit running entry" : "Edit closed entry"}</p>
             <h2 id="entry-editor-title" className="text-xl font-semibold">
-              {running ? "Change the work in progress" : "Change the recorded work"}
+              {creating ? "Add time entry" : running ? "Change the work in progress" : "Change the recorded work"}
             </h2>
             <p className="ink-muted mt-1 text-sm">
-              {running
-                ? "The clock keeps running. Fill in an end time to stop it and record the duration."
-                : "The duration and amount recalculate from the times and rate."}
+              {creating
+                ? "Record work you already did. The duration and amount calculate from the times and rate."
+                : running
+                  ? "The clock keeps running. Fill in an end time to stop it and record the duration."
+                  : "The duration and amount recalculate from the times and rate."}
             </p>
           </div>
           <button className="btn btn-ghost btn-sm" type="button" onClick={onClose} aria-label="Close editor">
@@ -174,7 +195,7 @@ export default function EntryEditor({ entry, customers, projects, activities, bu
           <div className="flex gap-2">
             <button className="btn btn-ghost" type="button" onClick={onClose}>Cancel</button>
             <button className="btn btn-primary" type="button" disabled={busy || !canSave} onClick={save}>
-              {keepsRunning ? "Save changes" : running ? "Save & stop timer" : "Save entry"}
+              {creating ? "Add entry" : keepsRunning ? "Save changes" : running ? "Save & stop timer" : "Save entry"}
             </button>
           </div>
         </footer>

@@ -112,6 +112,8 @@ claude mcp add --transport http cf-timetracker https://<api-host>/mcp \
   --header "Authorization: Bearer ttp_..."
 ```
 
+Once connected, you can run the whole day from the agent: "start a timer on Acme / Website Redesign / Development", "stop it", "I forgot to stop - stop it at 17:30", "log 2 hours on Mobile App yesterday 10:00 +06:00", "change that entry's note", "what did I bill this month". Tools: `get_active_timer`, `start_timer`, `stop_timer`, `query_summary`, `list_catalog`, `list_entries`, `add_time_entry`, `update_time_entry`, `delete_time_entry`, `create_customer`, `create_project`, `create_activity`. Add `--scope user` to `claude mcp add` to use it from every folder; restart the session after a Worker upgrade to pick up new tools.
+
 Details, the other client configs and the full contract: [`docs/2026-11-12-auth-and-mcp-blueprint.md`](docs/2026-11-12-auth-and-mcp-blueprint.md) (§6-7).
 
 ## Testing
